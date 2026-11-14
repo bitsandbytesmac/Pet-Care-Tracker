@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addDays,
+  isIsoDate,
+  isTime,
+  localDateTime,
+  localIsoDate,
   daysBetween,
   formatDayOfMonth,
   formatLongDate,
@@ -42,6 +47,44 @@ describe('date formatting', () => {
     [-3, '3 days ago'],
   ])('describes %i days as "%s"', (days, label) => {
     expect(formatRelativeDays(days)).toBe(label)
+  })
+})
+
+describe('date arithmetic and validation', () => {
+  it('adds days across month, year and leap-day boundaries', () => {
+    expect(addDays('2026-11-13', 4)).toBe('2026-11-17')
+    expect(addDays('2026-11-13', -13)).toBe('2026-10-31')
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
+    expect(addDays('2028-02-28', 1)).toBe('2028-02-29')
+  })
+
+  it('uses the local calendar date, not UTC', () => {
+    // 11:30 PM local is still the same local day even where UTC has rolled over.
+    expect(localIsoDate(new Date(2026, 10, 13, 23, 30))).toBe('2026-11-13')
+    expect(localIsoDate(new Date(2026, 0, 5, 0, 5))).toBe('2026-01-05')
+    expect(localDateTime('2026-11-13', '18:00').getHours()).toBe(18)
+  })
+
+  it.each([
+    ['2026-11-13', true],
+    ['2028-02-29', true],
+    ['2026-02-29', false],
+    ['2026-13-01', false],
+    ['2026-1-01', false],
+    ['today', false],
+    ['', false],
+  ])('isIsoDate(%s) is %s', (value, ok) => {
+    expect(isIsoDate(value)).toBe(ok)
+  })
+
+  it.each([
+    ['00:00', true],
+    ['23:59', true],
+    ['24:00', false],
+    ['8:00', false],
+    ['08:60', false],
+  ])('isTime(%s) is %s', (value, ok) => {
+    expect(isTime(value)).toBe(ok)
   })
 })
 

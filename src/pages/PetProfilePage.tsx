@@ -1,4 +1,5 @@
-import { ChevronLeft, FileText, Image, Pill, Receipt } from 'lucide-react'
+import { ChevronLeft, Pill } from 'lucide-react'
+import { AttachmentTile } from '../components/AttachmentTile'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { Button, TextLink } from '../components/Button'
@@ -7,7 +8,9 @@ import { Field, inputClass } from '../components/Field'
 import { PetAvatar } from '../components/PetAvatar'
 import { SeverityPill, severityDot } from '../components/StatusPill'
 import { cx } from '../lib/cx'
+import { errorMessage } from '../lib/api'
 import { formatShortDate } from '../lib/format'
+import { courseDay } from '../lib/meds'
 import { petTheme } from '../lib/petTheme'
 import { useIsDesktop } from '../lib/useMediaQuery'
 import { useAppState, type PetDetailsPatch } from '../state/AppStateContext'
@@ -207,10 +210,19 @@ function EditPetForm({ pet, onDone }: { pet: Pet; onDone: () => void }) {
     </Field>
   )
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    updatePet(pet.id, draft)
-    onDone()
+    setBusy(true)
+    try {
+      await updatePet(pet.id, draft)
+      onDone()
+    } catch (e) {
+      setError(errorMessage(e))
+      setBusy(false)
+    }
   }
 
   return (
@@ -234,9 +246,14 @@ function EditPetForm({ pet, onDone }: { pet: Pet; onDone: () => void }) {
           />
           Neutered
         </label>
+        {error && (
+          <p role="alert" className="rounded-xl bg-severe-tint px-3 py-2 text-sm text-severe sm:col-span-2 xl:col-span-4">
+            {error}
+          </p>
+        )}
         <div className="flex gap-3 self-end sm:col-span-2 xl:col-span-1">
-          <Button type="submit" className="flex-1">
-            Save
+          <Button type="submit" className="flex-1" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
           </Button>
           <Button variant="outline" onClick={onDone} className="flex-1">
             Cancel
@@ -248,7 +265,7 @@ function EditPetForm({ pet, onDone }: { pet: Pet; onDone: () => void }) {
 }
 
 function ActiveMedsCard({ pet }: { pet: Pet }) {
-  const { medications } = useAppState()
+  const { medications, today } = useAppState()
   const meds = medications.filter((m) => m.petId === pet.id && m.status === 'active')
   return (
     <SectionCard title="Active medications" action={<TextLink to="/medications">Manage</TextLink>}>
@@ -265,7 +282,7 @@ function ActiveMedsCard({ pet }: { pet: Pet }) {
                 <p className="font-semibold text-ink">{med.name}</p>
                 <p className="text-sm text-ink-muted">
                   {med.dose} · {med.frequency.toLowerCase()}
-                  {med.tracking.kind === 'course' && ` · day ${med.tracking.day} of ${med.tracking.totalDays}`}
+                  {med.tracking.kind === 'course' && ` · day ${courseDay(med, today)} of ${med.tracking.totalDays}`}
                 </p>
               </div>
             </li>
@@ -424,8 +441,6 @@ function DatedList({ items, empty }: { items: DatedItem[]; empty: string }) {
   )
 }
 
-const attachmentIcon = { photo: Image, receipt: Receipt, file: FileText }
-
 function FilesCard({ pet }: { pet: Pet }) {
   const { visits } = useAppState()
   const files = visits
@@ -439,19 +454,11 @@ function FilesCard({ pet }: { pet: Pet }) {
         </p>
       ) : (
         <ul className="mt-3 grid grid-cols-3 gap-3">
-          {files.map((file) => {
-            const Icon = attachmentIcon[file.kind]
-            return (
-              <li
-                key={file.id}
-                className="flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl bg-divider p-2 text-center text-xs text-ink-muted"
-              >
-                <Icon className="size-5" strokeWidth={2} aria-hidden="true" />
-                <span className="max-w-full truncate">{file.name}</span>
-                <span>{formatShortDate(file.visit.date)}</span>
-              </li>
-            )
-          })}
+          {files.map(({ visit, ...file }) => (
+            <li key={file.id}>
+              <AttachmentTile attachment={file} caption={formatShortDate(visit.date)} className="aspect-square" />
+            </li>
+          ))}
         </ul>
       )}
     </SectionCard>

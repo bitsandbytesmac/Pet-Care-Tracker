@@ -1,9 +1,16 @@
+/**
+ * Domain types shared by the React app (src/) and the API (server/).
+ * Dates are ISO "YYYY-MM-DD" strings in the owner's local calendar; times are 24-hour "HH:mm".
+ */
+
 export type PetColor = 'peach' | 'mint'
-export type Species = 'Cat' | 'Dog'
-export type Sex = 'Female' | 'Male'
+export const PET_COLORS: readonly PetColor[] = ['peach', 'mint']
+export const SPECIES = ['Cat', 'Dog', 'Other'] as const
+export type Species = (typeof SPECIES)[number]
+export const SEXES = ['Female', 'Male'] as const
+export type Sex = (typeof SEXES)[number]
 
 export interface WeightRecord {
-  /** ISO date, e.g. 2026-11-05 */
   date: string
   kg: number
 }
@@ -25,10 +32,13 @@ export interface Pet {
   weightHistory: WeightRecord[]
 }
 
-export type Frequency = 'Once daily' | 'Twice daily' | 'Three times daily' | 'As needed'
+export const FREQUENCIES = ['Once daily', 'Twice daily', 'Three times daily', 'As needed'] as const
+export type Frequency = (typeof FREQUENCIES)[number]
 
 export type MedicationTracking =
-  | { kind: 'course'; day: number; totalDays: number }
+  /** A fixed-length course. The current day is derived from `startDate`. */
+  | { kind: 'course'; totalDays: number }
+  /** Counted supply (chews, tablets). Goes down by one per dose given. */
   | { kind: 'supply'; remaining: number; total: number }
   | { kind: 'ongoing' }
 
@@ -38,23 +48,22 @@ export interface Medication {
   petId: string
   dose: string
   frequency: Frequency
-  /** 24-hour "HH:mm" times */
   reminderTimes: string[]
   status: 'active' | 'completed'
+  /** First day of the medicine. */
+  startDate: string
   tracking: MedicationTracking
-  /** ISO date, set when status is "completed" */
-  completedOn?: string
+  completedOn: string | null
 }
 
-/** One scheduled dose on today's schedule. */
+/** One scheduled dose on a given day. */
 export interface Dose {
   id: string
   medicationId: string
-  /** 24-hour "HH:mm" */
+  date: string
   time: string
-  given: boolean
-  /** The scheduled time has passed without the dose being given. */
-  overdue: boolean
+  /** ISO timestamp when the dose was marked given, or null. */
+  givenAt: string | null
 }
 
 export type DoseStatus = 'given' | 'due' | 'overdue'
@@ -63,24 +72,23 @@ export interface Attachment {
   id: string
   kind: 'photo' | 'receipt' | 'file'
   name: string
+  /** Authenticated download URL, or null for a placeholder with no stored file. */
+  url: string | null
 }
 
 export interface Visit {
   id: string
   petId: string
-  /** ISO date */
   date: string
-  /** 24-hour "HH:mm" */
   time: string
   title: string
   clinic: string
-  /** Short summary shown on list cards */
   summary: string
-  /** Full vet's notes shown in the details panel */
   notes: string
   prescriptionIds: string[]
   attachments: Attachment[]
   weightLogged: boolean
+  /** True when the visit is today or later (relative to the requested date). */
   upcoming: boolean
 }
 
@@ -102,13 +110,21 @@ export type Severity = (typeof SEVERITIES)[number]
 export interface SymptomEntry {
   id: string
   petId: string
-  /** ISO date */
   date: string
-  /** 24-hour "HH:mm" */
   time: string
   symptoms: SymptomKind[]
   title: string
   notes: string
   severity: Severity
-  photoName?: string
+  photo: Attachment | null
+}
+
+/** Response of GET /api/state */
+export interface AppData {
+  pets: Pet[]
+  medications: Medication[]
+  /** Doses scheduled on the requested date. */
+  doses: Dose[]
+  visits: Visit[]
+  symptoms: SymptomEntry[]
 }

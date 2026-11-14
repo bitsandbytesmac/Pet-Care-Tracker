@@ -1,11 +1,12 @@
-import { FileText, Image, Pill, Plus, Receipt } from 'lucide-react'
+import { Pill, Plus } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { FilterPills } from '../components/FilterPills'
 import { PetPill } from '../components/PetAvatar'
-import { SAMPLE_TODAY } from '../data/sample'
+import { AttachmentTile } from '../components/AttachmentTile'
+import { errorMessage } from '../lib/api'
 import { cx } from '../lib/cx'
 import {
   daysBetween,
@@ -21,7 +22,7 @@ import { prescriptionLabel } from '../lib/meds'
 import { petTheme } from '../lib/petTheme'
 import { useIsDesktop } from '../lib/useMediaQuery'
 import { useAppState } from '../state/AppStateContext'
-import type { Attachment, Pet, Visit } from '../types'
+import type { Pet, Visit } from '../types'
 
 const ALL = 'all'
 
@@ -38,7 +39,7 @@ function visitMeta(visit: Visit): string[] {
 }
 
 export default function VisitsPage() {
-  const { visits, pets } = useAppState()
+  const { visits, pets, today } = useAppState()
   const isDesktop = useIsDesktop()
   const [filter, setFilter] = useState<string>(ALL)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -71,7 +72,7 @@ export default function VisitsPage() {
         </button>
       </header>
 
-      {upcoming && upcomingPet && <UpcomingCard visit={upcoming} pet={upcomingPet} />}
+      {upcoming && upcomingPet && <UpcomingCard visit={upcoming} pet={upcomingPet} today={today} />}
 
       <FilterPills
         label="Filter visits by pet"
@@ -130,9 +131,9 @@ export default function VisitsPage() {
   )
 }
 
-function UpcomingCard({ visit, pet }: { visit: Visit; pet: Pet }) {
+function UpcomingCard({ visit, pet, today }: { visit: Visit; pet: Pet; today: string }) {
   const id = useId()
-  const when = formatRelativeDays(daysBetween(SAMPLE_TODAY, visit.date))
+  const when = formatRelativeDays(daysBetween(today, visit.date))
   return (
     <section
       aria-labelledby={id}
@@ -205,10 +206,10 @@ function TimelineItem({ visit, pet, last }: { visit: Visit; pet: Pet; last: bool
   )
 }
 
-const attachmentIcon = { photo: Image, receipt: Receipt, file: FileText } satisfies Record<Attachment['kind'], unknown>
-
 function VisitDetails({ visit }: { visit: Visit }) {
   const { pets, medications, addAttachment } = useAppState()
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const pet = pets.find((p) => p.id === visit.petId)
   const prescribed = visit.prescriptionIds.flatMap((id) => medications.filter((m) => m.id === id))
   const label = 'mb-2 text-xs font-semibold tracking-wider text-ink-muted uppercase'
@@ -250,36 +251,52 @@ function VisitDetails({ visit }: { visit: Visit }) {
 
       <h3 className={cx(label, 'mt-6')}>Attachments</h3>
       <ul className="flex flex-wrap gap-3">
-        {visit.attachments.map((att) => {
-          const Icon = attachmentIcon[att.kind]
-          return (
-            <li
-              key={att.id}
-              className="flex size-24 flex-col items-center justify-center gap-1.5 rounded-2xl bg-divider px-2 text-xs text-ink-muted"
-            >
-              <Icon className="size-5" strokeWidth={2} aria-hidden="true" />
-              <span className="max-w-full truncate">{att.name}</span>
-            </li>
-          )
-        })}
+        {visit.attachments.map((att) => (
+          <li key={att.id}>
+            <AttachmentTile attachment={att} className="size-24" />
+          </li>
+        ))}
         <li>
-          <label className="flex size-24 items-center justify-center rounded-2xl border border-dashed border-ink-muted text-ink-soft hover:bg-bg has-focus-visible:outline-2 has-focus-visible:outline-primary">
+          <label
+            className={cx(
+              'flex size-24 items-center justify-center rounded-2xl border border-dashed border-ink-muted text-ink-soft hover:bg-bg has-focus-visible:outline-2 has-focus-visible:outline-primary',
+              uploading && 'opacity-60',
+            )}
+          >
             <Plus className="size-5" strokeWidth={2} aria-hidden="true" />
             <span className="sr-only">Add attachment</span>
             <input
               type="file"
+              accept="image/*,application/pdf"
               className="sr-only"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) {
-                  addAttachment(visit.id, { kind: file.type.startsWith('image/') ? 'photo' : 'file', name: file.name })
+              disabled={uploading}
+              onChange={async (e) => {
+                const input = e.currentTarget
+                const file = input.files?.[0]
+                input.value = ''
+                if (!file) return
+                setUploadError('')
+                setUploading(true)
+                try {
+                  await addAttachment(visit.id, file)
+                } catch (error) {
+                  setUploadError(errorMessage(error))
+                } finally {
+                  setUploading(false)
                 }
-                e.target.value = ''
               }}
             />
           </label>
         </li>
       </ul>
+      <p role="status" className="mt-2 text-xs text-ink-muted empty:hidden">
+        {uploading ? 'Uploading…' : ''}
+      </p>
+      {uploadError && (
+        <p role="alert" className="mt-2 rounded-xl bg-severe-tint px-3 py-2 text-sm text-severe">
+          {uploadError}
+        </p>
+      )}
     </Card>
   )
 }

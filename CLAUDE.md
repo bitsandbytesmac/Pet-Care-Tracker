@@ -1,59 +1,59 @@
 # PetCare — Pet Care & Medication Tracker
 
-Personal, responsive web app (desktop + phone, one codebase) for tracking two pets' medications, vet visits and symptoms. The UI follows the design in "Pet Care Tracker UI.pdf" (5 phone screens + 5 desktop screens).
+Personal, responsive web app (desktop + phone, one codebase) for tracking pets' medications, vet visits and symptoms, with sign-in and a Postgres-backed API. The UI follows "Pet Care Tracker UI.pdf". The README covers setup, architecture and the API; this file holds the rules for working in the code.
 
 ## Commands
 
-- `npm run dev`: Vite dev server on http://localhost:5173 (strictPort)
-- `npm run build`: `tsc -b` + Vite build. Run this to type-check.
-- `npm test`: Vitest unit tests (`src/**/*.test.ts` only; Vitest must never pick up `tests/`)
-- `npm run check`: typecheck + unit + E2E. Run this before calling work done.
-- `npm run test:e2e`: Playwright (E2E + axe accessibility), both projects (`desktop` 1440×900, `mobile` Pixel 7). Starts the dev server itself, or reuses one that is already running.
-- `npm run test:e2e:ui`: Playwright UI mode
-- `npx playwright test tests/today.spec.ts --project=mobile`: run one file or one project
+- `npm run setup`: start Postgres (Docker, host port **5434**), migrate, seed `demo@petcare.local` / `petcare-demo-2026`
+- `npm run dev`: app + API on http://localhost:5173 (a Vite plugin serves `server/app.ts` at `/api`)
+- `npm run check`: typecheck + unit + API + E2E. Run this before calling work done. Needs the database up (`npm run db:up`).
+- `npm test`: unit tests only (`src/**/*.test.ts`, no database)
+- `npm run test:api`: API integration tests (`server/**/*.test.ts`, real Postgres)
+- `npm run test:e2e`: Playwright (E2E + axe), `desktop` and `mobile` projects
+- `npm run db:generate` after any change to `server/db/schema.ts`, then `npm run db:migrate`. Commit the generated SQL in `drizzle/`. CI fails if the schema and migrations disagree.
 
 ## Stack
 
-React 19 + Vite 8 + TypeScript 7 (strict, `noUncheckedIndexedAccess`), Tailwind CSS v4 (via `@tailwindcss/vite`), React Router 8 (`react-router` package), lucide-react icons, Playwright.
+React 19, Vite 8, TypeScript 7 (strict, `noUncheckedIndexedAccess`), Tailwind v4, React Router 8 (`react-router`), lucide-react · Hono 4, Zod 4, Better Auth 1.7, Drizzle ORM + `pg`, Postgres 17 · Vitest 5, Playwright + `@axe-core/playwright`.
 
 ## Layout
 
-- `src/index.css`: the only CSS file. Tailwind import, `@theme` design tokens, a few base styles.
-- `src/types/`: data models (Pet, Medication, Dose, Visit, SymptomEntry).
-- `src/data/sample.ts`: seed data plus `SAMPLE_TODAY` (2026-11-13). The app's "today" is fixed to that date so screens and tests are deterministic.
-- `src/state/`: `AppStateProvider` (useState, in memory) and `useAppState()`. All mutations go through it, so a backend can replace it later. A full page reload resets the state.
-- `src/lib/`: pure helpers: `format.ts` (dates/times, always UTC), `meds.ts` (dose status, refill, progress, next dose), `petTheme.ts`, `cx.ts`, `useMediaQuery.ts`.
-- `src/components/`: shared UI (AppLayout, Sidebar, BottomTabBar, Card/SectionCard, Button/ButtonLink/TextLink, PetAvatar/PetPill, StatusPill/SeverityPill, SegmentedControl, FilterPills, ProgressBar, SectionHeader, Field, AddMedicationForm, UpcomingVisitCard).
-- `src/pages/`: one file per route: `/` Today, `/pets/:petId`, `/medications`, `/visits`, `/log`. Subcomponents used by only one screen stay in that page file.
-- `tests/`: one Playwright spec per screen plus `navigation.spec.ts`.
+- `src/types/index.ts`: the contract shared by app and API. Change it first, then both sides.
+- `src/lib/`: pure, shared logic (`format.ts` dates/times, `meds.ts` dose status/course day/refill). The server imports from here too, so keep it free of browser-only code. `api.ts` and `authClient.ts` are browser-only.
+- `src/state/AppStateProvider.tsx`: the only place the app talks to the data API. Pages call `useAppState()`.
+- `server/app.ts` → `routes/data.ts`, `routes/files.ts`, `routes/dev.ts` (test-only). `server/http.ts` has `parse()`, `pathId()`, `requireUser`.
+- `server/db/schema.ts`: Better Auth tables (field names must match Better Auth's core schema) + app tables.
+- `api/index.ts`: Vercel entry. Not yet tested on a real deployment.
+
+## Server rules
+
+- **Every query on app tables filters by `userId`.** Another user's id is a 404, not a 403. Add an isolation assertion to `server/api.test.ts` for each new write endpoint.
+- Validate every input with Zod through `parse()`. Path ids go through `pathId()`, which turns non-UUIDs into a 404.
+- Dates are `YYYY-MM-DD` strings in the user's local calendar, sent by the client. Never use the server clock for "today".
+- Daily doses are created by `ensureDosesForDate()`, once per medicine per day. Don't write doses elsewhere except when seeding.
+- Never commit `.env`. Test routes must stay behind `testRoutesEnabled()`.
+- File storage only through `getStorage()`. The Vercel Blob driver is a TODO in `server/storage.ts`.
 
 ## Styling rules
 
-- Tailwind classes only. No inline `style` objects and no extra CSS files. Dynamic widths and heights use native `<progress>` or SVG attributes instead.
-- Tailwind's default palette is cleared (`--color-*: initial`). Only the tokens in `@theme` exist (`bg-surface`, `text-ink`, `bg-primary`, `text-warn`, `bg-pet-peach`, ...) plus `white`.
-- Build class names from full literal strings, never concatenated fragments. Per-pet colors live in `lib/petTheme.ts` for that reason.
-- **Display conflicts:** two display utilities on one element (e.g. a base `inline-flex` plus a caller's `hidden md:inline-flex`) conflict, and CSS order picks the winner, not class order. Components that set a default display use `display('inline-flex', className)` from `lib/cx.ts`, which drops the default when the caller passes a display class. Keep doing this for new components.
-- Breakpoint is `md` (768px): sidebar at md and up, bottom tab bar + floating "+" below md. When a screen's markup differs structurally between sizes (Medications table vs cards, Visits list+details vs timeline, Pet profile grid vs tabs), render only one variant using `useIsDesktop()`. Don't render both and hide one with CSS: duplicate text breaks Playwright strict locators.
-- No gradients, no emoji, light shadows only. Icons use `strokeWidth={2}` and `aria-hidden`.
+- Tailwind classes only: no inline `style` objects, no extra CSS files. Dynamic sizes use `<progress>` or SVG attributes.
+- Only the `@theme` tokens in `src/index.css` exist (default palette cleared) plus `white`. Build class names from full literal strings (see `lib/petTheme.ts`).
+- **Display conflicts:** components with a default display use `display('inline-flex', className)` from `lib/cx.ts`, so a caller's `hidden md:inline-flex` wins.
+- Breakpoint is `md`. If markup differs structurally between sizes, render one variant with `useIsDesktop()`. Don't render both and hide one with CSS (it breaks strict Playwright locators).
+- No gradients, no emoji, light shadows only. Icons: `strokeWidth={2}`, `aria-hidden`.
 
 ## Accessibility conventions
 
-- Toggles and filters are `<button aria-pressed>`. Phone profile tabs use `role="tab"` with `aria-selected`. Active nav links get `aria-current="page"`.
-- Touch targets are at least `h-11`. Icon-only buttons have an `aria-label`.
-- Cards with headings are `<section aria-labelledby>`, so tests can find them with `getByRole('region', { name })`.
-- Form confirmations use `role="status"` and errors use `role="alert"`.
+`aria-pressed` toggles; `role="tab"` + `aria-selected` tabs; `aria-current="page"` nav; touch targets at least `h-11`; `aria-label` on icon-only buttons; card sections are `<section aria-labelledby>`; `role="status"` for confirmations, `role="alert"` for errors. `tests/accessibility.spec.ts` must stay at zero violations. Add new screens to it.
 
 ## Testing conventions
 
-- New pure logic goes in `src/lib/` with a co-located `*.test.ts`. New UI flows get a Playwright spec. New screens get an entry in `tests/accessibility.spec.ts`.
-- `tests/accessibility.spec.ts` must stay at zero axe violations. Fix the markup; don't disable rules.
-- Deployment: Vercel (`vercel.json` rewrites everything except `/api/*` to `index.html`). CI: `.github/workflows/ci.yml`.
+- E2E: import `test`/`expect` from `tests/fixtures.ts`. `page` is signed in as a fresh seeded user, with the clock frozen at 2026-11-13 19:30. Use plain `@playwright/test` only for signed-out flows (`auth.spec.ts`).
+- API: `createTestUser()` from `server/test/client.ts`. Each test makes its own user; there's no shared state and no cleanup.
+- Locate elements with `getByRole`/`getByLabel`/`getByText`; no test IDs. Branch on `isMobile` or `test.skip` for size-only UI.
+- Pet ids are UUIDs. Navigate with `/pets` (redirects to the first pet) or by clicking.
+- Prove data persists: after a change, `page.reload()` and assert again.
 
-- Use `getByRole`, `getByLabel` and `getByText`. Avoid `data-testid`.
-- Every test runs in both projects. Use `isMobile` to branch, or `test.skip` for desktop-only or phone-only UI.
-- To keep in-memory state across screens, navigate by clicking links, not `page.goto`.
-- Responsive text that exists twice (e.g. the schedule status as a phone label and as a desktop pill): filter with `.filter({ visible: true })`.
+## Not implemented yet
 
-## Not implemented yet (placeholder buttons)
-
-Add a pet, Add visit, Reschedule, Add questions for the vet, the notification bell. There is no persistence or backend yet. Age, weight, clinic, vaccine date and food are placeholders (`[AGE]` etc.) that the user fills in through Edit profile.
+Add visit, Reschedule, Add questions for the vet, notifications, editing or deleting medicines, recording weights, automatically completing finished courses, password reset, the Vercel Blob driver.

@@ -26,5 +26,7 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    // Each test signs up a fresh, seeded user through /api/dev/demo-session.
+    env: { ENABLE_TEST_ROUTES: 'true', ALLOW_SIGNUP: 'true' },
   },
 })

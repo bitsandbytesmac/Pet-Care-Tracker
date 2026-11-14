@@ -1,8 +1,11 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
+
+/** "Pets" opens the first pet's profile; pet ids are UUIDs. */
+const PET_URL = /\/pets\/[0-9a-f-]{36}$/
 
 const desktopLinks = [
   { name: 'Today', path: /\/$/, heading: 'Today' },
-  { name: 'Pets', path: /\/pets\/mochi$/, heading: 'Mochi' },
+  { name: 'Pets', path: PET_URL, heading: 'Mochi' },
   { name: 'Medications', path: /\/medications$/, heading: 'Medications' },
   { name: 'Vet visits', path: /\/visits$/, heading: 'Vet visits' },
   { name: 'Symptom log', path: /\/log$/, heading: /symptom log/i },
@@ -10,7 +13,7 @@ const desktopLinks = [
 
 const mobileLinks = [
   { name: 'Today', path: /\/$/, heading: 'Today' },
-  { name: 'Pets', path: /\/pets\/mochi$/, heading: 'Mochi' },
+  { name: 'Pets', path: PET_URL, heading: 'Mochi' },
   { name: 'Meds', path: /\/medications$/, heading: 'Medications' },
   { name: 'Visits', path: /\/visits$/, heading: 'Vet visits' },
   { name: 'Log', path: /\/log$/, heading: /log a symptom/i },

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test.describe('medications', () => {
   test.beforeEach(async ({ page }) => {
@@ -33,6 +33,10 @@ test.describe('medications', () => {
 
     await page.getByRole('button', { name: 'Mark as refilled' }).click()
     await expect(page.getByText('Refill soon: Joint supplement')).toBeHidden()
+
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1, name: 'Medications' })).toBeVisible()
+    await expect(page.getByText('Refill soon: Joint supplement')).toBeHidden()
   })
 
   test('adding a medication puts it in the list and on today’s schedule', async ({ page, isMobile }) => {
@@ -50,9 +54,9 @@ test.describe('medications', () => {
     await expect(page.getByRole('button', { name: 'Active (4)' })).toBeVisible()
     await expect(page.getByRole('main').getByText('Probiotic', { exact: true })).toBeVisible()
 
-    // Navigate client-side (a full reload would reset the in-memory state).
-    const nav = page.getByRole('navigation', { name: isMobile ? 'Tab bar' : 'Sidebar' })
-    await nav.getByRole('link', { name: 'Today', exact: true }).click()
+    // Saved on the server: a full page load still shows it on today's schedule.
+    await page.goto('/')
     await expect(page.getByRole('region', { name: 'Doses given' })).toContainText('2 / 5')
+    await expect(page.getByRole('list', { name: 'Medication schedule' })).toContainText('Probiotic')
   })
 })

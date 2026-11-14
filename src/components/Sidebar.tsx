@@ -1,6 +1,8 @@
-import { PawPrint, Plus } from 'lucide-react'
+import { LogOut, PawPrint, Plus } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
+import { authClient } from '../lib/authClient'
 import { cx } from '../lib/cx'
+import { SignOutButton } from './SignOutButton'
 import { useAppState } from '../state/AppStateContext'
 import { navItems } from './navItems'
 import { PetAvatar } from './PetAvatar'
@@ -12,11 +14,12 @@ const linkIdle = 'text-ink-soft hover:bg-divider hover:text-ink'
 export function Sidebar({ className }: { className?: string }) {
   const { pathname } = useLocation()
   const { pets } = useAppState()
+  const { data: session } = authClient.useSession()
 
   return (
     <aside
       className={cx(
-        'sticky top-0 h-dvh w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface px-4 py-5',
+        'sticky top-0 h-dvh w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface px-4 pt-5 pb-4',
         className,
       )}
     >
@@ -68,14 +71,23 @@ export function Sidebar({ className }: { className?: string }) {
             )
           })}
         </ul>
-        <button
-          type="button"
+        <Link
+          to="/pets/new"
+          aria-current={pathname === '/pets/new' ? 'page' : undefined}
           className="mt-3 flex h-11 w-full items-center gap-2 rounded-xl border border-dashed border-ink-muted px-3 text-sm font-medium text-ink-soft hover:bg-bg"
         >
           <Plus className="size-4" strokeWidth={2} aria-hidden="true" />
           Add a pet
-        </button>
+        </Link>
       </nav>
+
+      <div className="mt-auto border-t border-divider pt-4">
+        {session && <p className="truncate px-3 text-xs text-ink-muted">{session.user.email}</p>}
+        <SignOutButton className="mt-1 flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-ink-soft hover:bg-divider hover:text-ink">
+          <LogOut className="size-5" strokeWidth={2} aria-hidden="true" />
+          Sign out
+        </SignOutButton>
+      </div>
     </aside>
   )
 }

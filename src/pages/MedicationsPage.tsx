@@ -116,7 +116,8 @@ function MedIcon({ warn }: { warn: boolean }) {
 }
 
 function MedicationCard({ med, pet, doses }: { med: Medication; pet: Pet; doses: Dose[] }) {
-  const progress = progressInfo(med)
+  const { today } = useAppState()
+  const progress = progressInfo(med, today)
   return (
     <Card as="li" className="p-5">
       <div className="flex items-start gap-4">
@@ -156,6 +157,7 @@ interface MedicationTableProps {
 }
 
 function MedicationTable({ meds, pets, doses, tab }: MedicationTableProps) {
+  const { today } = useAppState()
   const th = 'px-5 py-3 text-left text-xs font-semibold tracking-wider text-ink-muted uppercase'
   return (
     <Card className="overflow-hidden">
@@ -184,7 +186,7 @@ function MedicationTable({ meds, pets, doses, tab }: MedicationTableProps) {
           <tbody className="divide-y divide-divider">
             {meds.map((med) => {
               const pet = pets.find((p) => p.id === med.petId)
-              const progress = progressInfo(med)
+              const progress = progressInfo(med, today)
               return (
                 <tr key={med.id}>
                   <th scope="row" className="px-5 py-4 text-left font-normal">

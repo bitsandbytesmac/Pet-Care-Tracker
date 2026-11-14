@@ -1,15 +1,13 @@
 import { createContext, useContext } from 'react'
-import type {
-  Attachment,
-  Frequency,
-  Medication,
-  Pet,
-  Severity,
-  SymptomEntry,
-  SymptomKind,
-  Visit,
-  Dose,
-} from '../types'
+import type { AppData, Frequency, Medication, Pet, PetColor, Severity, Sex, Species, SymptomEntry, SymptomKind } from '../types'
+
+export interface NewPet {
+  name: string
+  species: Species
+  breed: string
+  sex: Sex
+  color: PetColor
+}
 
 export interface NewMedication {
   name: string
@@ -28,26 +26,26 @@ export interface NewSymptomEntry {
   symptoms: SymptomKind[]
   severity: Severity
   notes: string
-  photoName?: string
 }
 
 export type PetDetailsPatch = Partial<
   Pick<Pet, 'age' | 'weight' | 'neutered' | 'clinic' | 'lastVaccine' | 'food' | 'allergies'>
 >
 
-export interface AppState {
-  pets: Pet[]
-  medications: Medication[]
-  doses: Dose[]
-  visits: Visit[]
-  symptoms: SymptomEntry[]
-  /** Mark a dose given, or undo it. Supply-tracked medicines go down/up by one. */
+export interface AppState extends AppData {
+  /** The local calendar date ("YYYY-MM-DD") the data was loaded for. */
+  today: string
+  /** Current time, refreshed every 30 seconds. */
+  now: Date
+  /** Mark a dose given, or undo it. Updates the screen at once and rolls back if saving fails. */
   toggleDose: (doseId: string) => void
-  addMedication: (input: NewMedication) => Medication
   markRefilled: (medicationId: string) => void
-  addSymptom: (input: NewSymptomEntry) => SymptomEntry
-  updatePet: (petId: string, patch: PetDetailsPatch) => void
-  addAttachment: (visitId: string, attachment: Omit<Attachment, 'id'>) => void
+  /** The functions below throw on failure so forms can show the error. */
+  addPet: (input: NewPet) => Promise<Pet>
+  updatePet: (petId: string, patch: PetDetailsPatch) => Promise<Pet>
+  addMedication: (input: NewMedication) => Promise<Medication>
+  addSymptom: (input: NewSymptomEntry, photo?: File) => Promise<SymptomEntry>
+  addAttachment: (visitId: string, file: File) => Promise<void>
 }
 
 export const AppStateContext = createContext<AppState | null>(null)

@@ -1,12 +1,12 @@
 import { useId, useState, type FormEvent } from 'react'
+import { errorMessage } from '../lib/api'
+import { cx } from '../lib/cx'
 import { parseTimeList } from '../lib/format'
 import { useAppState } from '../state/AppStateContext'
-import type { Frequency } from '../types'
+import { FREQUENCIES, type Frequency } from '../types'
 import { Button } from './Button'
 import { Card } from './Card'
 import { Field, inputClass } from './Field'
-
-const FREQUENCIES: Frequency[] = ['Once daily', 'Twice daily', 'Three times daily', 'As needed']
 
 const defaultTimes: Record<Frequency, string> = {
   'Once daily': '8:00 AM',
@@ -28,8 +28,17 @@ export function AddMedicationForm({ className }: { className?: string }) {
   const [times, setTimes] = useState(defaultTimes['Once daily'])
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  if (pets.length === 0) {
+    return (
+      <Card as="section" aria-label="Add medication" className={cx('p-5 text-sm text-ink-muted', className)}>
+        Add a pet first, then you can add their medicines.
+      </Card>
+    )
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSaved('')
     const reminderTimes = parseTimeList(times)
@@ -42,20 +51,27 @@ export function AddMedicationForm({ className }: { className?: string }) {
       return
     }
     const days = Number.parseInt(duration, 10)
-    const med = addMedication({
-      name: name.trim(),
-      petId,
-      dose: dose.trim(),
-      frequency,
-      reminderTimes,
-      totalDays: Number.isFinite(days) && days > 0 ? days : undefined,
-    })
-    const pet = pets.find((p) => p.id === petId)
-    setError('')
-    setSaved(`${med.name} added for ${pet?.name ?? 'your pet'}.`)
-    setName('')
-    setDose('')
-    setDuration('')
+    setBusy(true)
+    try {
+      const med = await addMedication({
+        name: name.trim(),
+        petId,
+        dose: dose.trim(),
+        frequency,
+        reminderTimes,
+        totalDays: Number.isFinite(days) && days > 0 ? days : undefined,
+      })
+      const pet = pets.find((p) => p.id === petId)
+      setError('')
+      setSaved(`${med.name} added for ${pet?.name ?? 'your pet'}.`)
+      setName('')
+      setDose('')
+      setDuration('')
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -148,8 +164,8 @@ export function AddMedicationForm({ className }: { className?: string }) {
           {saved}
         </p>
 
-        <Button type="submit" block>
-          Save medication
+        <Button type="submit" block disabled={busy}>
+          {busy ? 'Saving…' : 'Save medication'}
         </Button>
       </form>
     </Card>

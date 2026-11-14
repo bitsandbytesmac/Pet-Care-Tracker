@@ -12,7 +12,33 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: petcare
+          POSTGRES_PASSWORD: petcare
+          POSTGRES_DB: petcare
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U petcare -d petcare"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://petcare:petcare@localhost:5432/petcare
+      # Throwaway secret for the CI database only.
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      BETTER_AUTH_URL: http://localhost:5173
+      ALLOW_SIGNUP: 'true'
+      ENABLE_TEST_ROUTES: 'true'
+      STORAGE_DRIVER: local
+      UPLOAD_DIR: .data/uploads
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +54,21 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Migrate database
+        run: npm run db:migrate
+
+      - name: Check migrations match the schema
+        run: |
+          npx drizzle-kit generate --name ci-drift-check
+          if [ -n "$(git status --porcelain drizzle)" ]; then
+            echo "::error::server/db/schema.ts changed without a migration. Run: npm run db:generate"
+            git status --porcelain drizzle
+            exit 1
+          fi
+
+      - name: API integration tests
+        run: npm run test:api
 
       - name: Build
         run: npm run build

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test.describe('log a symptom', () => {
   test.beforeEach(async ({ page }) => {
@@ -26,6 +26,27 @@ test.describe('log a symptom', () => {
 
     // The form resets for the next entry.
     await expect(page.getByRole('button', { name: 'Vomiting', exact: true })).toHaveAttribute('aria-pressed', 'false')
+
+    // Saved on the server.
+    await page.reload()
+    await expect(
+      page.getByRole('list', { name: 'Symptom history' }).getByRole('listitem').first(),
+    ).toContainText('Vomiting, Lethargy')
+  })
+
+  test('attaches a photo to the entry', async ({ page }) => {
+    await page.getByRole('button', { name: 'Coughing', exact: true }).click()
+    await page.getByLabel('Add a photo').setInputFiles({
+      name: 'cough.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('89504e470d0a1a0a', 'hex'),
+    })
+    await expect(page.getByText('cough.png')).toBeVisible()
+    await page.getByRole('button', { name: /^Save entry/ }).click()
+
+    await expect(page.getByRole('status')).toHaveText("Saved to Mochi's log")
+    const first = page.getByRole('list', { name: 'Symptom history' }).getByRole('listitem').first()
+    await expect(first.getByRole('link', { name: 'View photo' })).toHaveAttribute('href', /^\/api\/files\//)
   })
 
   test('asks for at least one symptom', async ({ page }) => {

@@ -8,7 +8,7 @@ import { PetAvatar } from '../components/PetAvatar'
 import { SectionHeader } from '../components/SectionHeader'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SeverityPill } from '../components/StatusPill'
-import { SAMPLE_TODAY } from '../data/sample'
+import { errorMessage } from '../lib/api'
 import { cx } from '../lib/cx'
 import { currentTime, formatShortDate, formatTime } from '../lib/format'
 import { useAppState } from '../state/AppStateContext'
@@ -54,39 +54,54 @@ export default function LogPage() {
 }
 
 function SymptomForm() {
-  const { pets, addSymptom } = useAppState()
+  const { pets, addSymptom, today } = useAppState()
   const id = useId()
   const [petId, setPetId] = useState(pets[0]?.id ?? '')
   const [selected, setSelected] = useState<SymptomKind[]>([])
   const [severity, setSeverity] = useState<Severity>('Mild')
-  const [date, setDate] = useState(SAMPLE_TODAY)
+  const [date, setDate] = useState(today)
   const [time, setTime] = useState(currentTime)
   const [notes, setNotes] = useState('')
-  const [photo, setPhoto] = useState<string | null>(null)
+  const [photo, setPhoto] = useState<File | null>(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (pets.length === 0) {
+    return (
+      <Card as="section" aria-label="New entry" className="p-5 text-sm text-ink-muted md:p-6">
+        Add a pet first, then you can log their symptoms.
+      </Card>
+    )
+  }
 
   function toggleSymptom(kind: SymptomKind) {
     setSelected((current) => (current.includes(kind) ? current.filter((k) => k !== kind) : [...current, kind]))
     setError('')
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setSaved('')
     if (selected.length === 0) {
-      setSaved('')
       setError('Pick at least one symptom.')
       return
     }
-    const ordered = SYMPTOM_KINDS.filter((k) => selected.includes(k))
-    addSymptom({ petId, date, time, symptoms: ordered, severity, notes: notes.trim(), photoName: photo ?? undefined })
-    const pet = pets.find((p) => p.id === petId)
-    setSaved(`Saved to ${pet?.name ?? 'your pet'}'s log`)
-    setError('')
-    setSelected([])
-    setSeverity('Mild')
-    setNotes('')
-    setPhoto(null)
+    setBusy(true)
+    try {
+      await addSymptom({ petId, date, time, symptoms: selected, severity, notes: notes.trim() }, photo ?? undefined)
+      const pet = pets.find((p) => p.id === petId)
+      setSaved(`Saved to ${pet?.name ?? 'your pet'}'s log`)
+      setError('')
+      setSelected([])
+      setSeverity('Mild')
+      setNotes('')
+      setPhoto(null)
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
   }
 
   const count = selected.length
@@ -162,7 +177,7 @@ function SymptomForm() {
               type="date"
               className={inputClass}
               value={date}
-              max={SAMPLE_TODAY}
+              max={today}
               onChange={(e) => setDate(e.target.value)}
             />
           </Field>
@@ -200,15 +215,15 @@ function SymptomForm() {
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-ink-muted px-4 text-sm font-medium text-ink-soft hover:bg-bg has-focus-visible:outline-2 has-focus-visible:outline-primary">
             <Camera className="size-4 shrink-0" strokeWidth={2} aria-hidden="true" />
-            <span className="truncate">{photo ?? 'Add a photo'}</span>
+            <span className="truncate">{photo?.name ?? 'Add a photo'}</span>
             <input
               type="file"
               accept="image/*"
               className="sr-only"
-              onChange={(e) => setPhoto(e.target.files?.[0]?.name ?? null)}
+              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
             />
           </label>
-          <Button type="submit" className="h-12 text-base">
+          <Button type="submit" className="h-12 text-base" disabled={busy}>
             Save entry{count > 0 && ` (${count} symptom${count > 1 ? 's' : ''})`}
           </Button>
         </div>
@@ -262,6 +277,17 @@ function SymptomHistory({ entries, pets }: { entries: SymptomEntry[]; pets: Pet[
                   {entry.title}
                 </p>
                 {entry.notes && <p className="text-xs text-ink-muted">{entry.notes}</p>}
+                {entry.photo?.url && (
+                  <a
+                    href={entry.photo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-11 items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary-dark"
+                  >
+                    <Camera className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                    View photo
+                  </a>
+                )}
               </div>
               <SeverityPill severity={entry.severity} />
             </li>

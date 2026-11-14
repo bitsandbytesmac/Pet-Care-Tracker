@@ -4,3 +4,9 @@ test-results
 playwright-report
 playwright/.cache
 *.local
+
+# Local env and data
+.env
+.env.*
+!.env.example
+.data

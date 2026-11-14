@@ -20,6 +20,33 @@ export const formatMonthAbbr = (iso: string) => format(iso, { month: 'short' }).
 /** "17" */
 export const formatDayOfMonth = (iso: string) => String(toUtcDate(iso).getUTCDate())
 
+/** "2026-11-13" + 4 → "2026-11-17" */
+export function addDays(iso: string, days: number): string {
+  const date = toUtcDate(iso)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** The local calendar date of `now` as "YYYY-MM-DD" (not UTC: 11 PM in Manila is still that day). */
+export function localIsoDate(now: Date = new Date()): string {
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/** A local Date for an ISO date + "HH:mm" time. */
+export function localDateTime(isoDate: string, hhmm: string): Date {
+  return new Date(`${isoDate}T${hhmm}:00`)
+}
+
+export function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(toUtcDate(value).getTime()) && toUtcDate(value).toISOString().startsWith(value)
+}
+
+export function isTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+}
+
 export function daysBetween(fromIso: string, toIso: string): number {
   return Math.round((toUtcDate(toIso).getTime() - toUtcDate(fromIso).getTime()) / 86_400_000)
 }
@@ -43,7 +70,7 @@ export function formatTime(hhmm: string): string {
 /** Current local time as "HH:mm". */
 export function currentTime(): string {
   const now = new Date()
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}`
 }
 
 /**

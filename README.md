@@ -1,154 +1,163 @@
 # PetCare
 
-A personal Pet Care & Medication Tracker. It keeps track of daily doses, medication courses and supplies, vet visits, and symptoms noticed between visits. One responsive codebase serves both desktop and phone.
+A personal Pet Care & Medication Tracker. It tracks daily doses, medication courses and supplies, vet visits, and symptoms noticed between visits. One responsive codebase serves desktop and phone, with a sign-in and a Postgres-backed API.
 
 | Screen | Route | Desktop (≥ 768px) | Phone |
 | --- | --- | --- | --- |
+| Sign in | `/login` | Email + password; optional sign-up | Same |
 | Today | `/` | Summary tiles, schedule, upcoming visit, recent symptoms | Dose card, schedule, pet chips |
 | Pet profile | `/pets/:petId` | All cards in a grid; sidebar switches pets | Overview / Health / Files tabs |
+| Add a pet | `/pets/new` | Form | Form |
 | Medications | `/medications` | Table + Add medication form | One card per medicine |
-| Vet visits | `/visits` | Visit list + details panel | Vertical timeline |
-| Log a symptom | `/log` | Form + History side by side | Form, then History |
+| Vet visits | `/visits` | Visit list + details panel, file uploads | Vertical timeline |
+| Log a symptom | `/log` | Form + History side by side, photo upload | Form, then History |
 
 ## Tech stack
 
 | Area | Choice |
 | --- | --- |
-| UI | React 19, TypeScript 7 (strict, `noUncheckedIndexedAccess`) |
-| Build | Vite 8 |
-| Styling | Tailwind CSS v4; design tokens in `@theme` |
-| Routing | React Router 8 (`react-router`) |
-| Icons | lucide-react |
-| State | React context + `useState` (in memory; no backend yet) |
-| Unit tests | Vitest |
-| E2E + a11y tests | Playwright (desktop and mobile projects) + axe-core |
-| CI / hosting | GitHub Actions; Vercel |
+| Frontend | React 19, TypeScript 7 (strict), Vite 8, Tailwind CSS v4, React Router 8, lucide-react |
+| API | Hono 4 (one app under `/api`), Zod 4 validation |
+| Auth | Better Auth (email + password, database sessions, rate limiting) |
+| Database | PostgreSQL 17 via Drizzle ORM + drizzle-kit migrations (`pg` driver) |
+| Files | Storage interface; local disk now, Vercel Blob later |
+| Tests | Vitest (unit + API integration), Playwright + axe-core (E2E + accessibility) |
+| CI / hosting | GitHub Actions; Vercel (planned), Neon (planned) |
 
 ## Getting started
 
-Requires Node.js 20.19+ (developed on Node 22).
+Requires Node.js 20.19+ (developed on 22) and Docker Desktop.
 
 ```bash
 npm install
-npx playwright install chromium   # first time only, for the E2E tests
-npm run dev                        # http://localhost:5173
+cp .env.example .env              # then set BETTER_AUTH_SECRET (command is in the file)
+npm run setup                     # start Postgres, run migrations, create the demo account
+npx playwright install chromium   # first time only, for E2E tests
+npm run dev                       # http://localhost:5173 (app + API on one port)
 ```
+
+Sign in with the demo account: **demo@petcare.local** / **petcare-demo-2026**. It's seeded with Mochi, Bantay and their sample medicines, visits and symptoms, with dates relative to today.
+
+Postgres runs in Docker on host port **5434**, so it doesn't clash with a local Postgres on 5432 or another project's container on 5433. Data persists in the `petcare-db` volume. `npm run db:down` stops the container; `docker compose down -v` also deletes the data.
 
 ## Scripts
 
 | Script | What it does |
 | --- | --- |
-| `npm run dev` | Start the Vite dev server on port 5173 |
-| `npm run build` | Type-check (`tsc -b`) and build to `dist/` |
-| `npm run preview` | Serve the production build locally |
-| `npm run typecheck` | Type-check only |
-| `npm test` | Run the Vitest unit tests once |
-| `npm run test:watch` | Vitest in watch mode |
-| `npm run test:e2e` | Run every Playwright test (E2E + accessibility) at both screen sizes |
-| `npm run test:e2e:ui` | Open Playwright UI mode for debugging |
-| `npm run check` | Type-check + unit tests + E2E: run before pushing |
+| `npm run dev` | Vite dev server; also serves the API at `/api` |
+| `npm run build` | Type-check everything (`tsc -b`) and build the frontend to `dist/` |
+| `npm run typecheck` | Type-check frontend, server and tests |
+| `npm test` / `test:watch` | Unit tests (no database) |
+| `npm run test:api` | API integration tests against the database in `DATABASE_URL` |
+| `npm run test:e2e` / `test:e2e:ui` | Playwright E2E + accessibility at desktop and phone sizes |
+| `npm run check` | Type-check + unit + API + E2E: run before pushing |
+| `npm run setup` | `db:up` + `db:migrate` + `db:seed` |
+| `npm run db:up` / `db:down` | Start / stop the Postgres container |
+| `npm run db:generate` | Create a migration after changing `server/db/schema.ts` |
+| `npm run db:migrate` | Apply pending migrations |
+| `npm run db:seed` | Create the demo account (safe to re-run) |
+| `npm run db:studio` | Browse the database in Drizzle Studio |
+
+## Environment variables
+
+See [.env.example](.env.example). The server validates these at startup and lists any that are missing.
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string (Docker locally; Neon's **pooled** string later) |
+| `BETTER_AUTH_SECRET` | At least 32 random characters; signs session cookies |
+| `BETTER_AUTH_URL` | Public URL of the app, e.g. `http://localhost:5173` |
+| `ALLOW_SIGNUP` | `true` lets new accounts sign up. Set to `false` in production once your account exists. |
+| `ENABLE_TEST_ROUTES` | `true` enables `/api/dev/*` for tests. Never in production (also refused when `VERCEL_ENV=production`). |
+| `STORAGE_DRIVER` / `UPLOAD_DIR` | `local` + a folder for uploads; `vercel-blob` later |
 
 ## Project structure
 
 ```
-src/
-  components/   Shared UI: AppLayout, Sidebar, BottomTabBar, Card, Button, PetAvatar,
-                StatusPill, SegmentedControl, FilterPills, ProgressBar, SectionHeader, ...
-  pages/        One component per route (screen-only subcomponents live in the same file)
-  state/        AppStateProvider + useAppState(): the only place data changes
-  data/         sample.ts: seed data and SAMPLE_TODAY
-  lib/          Pure helpers: date/time formatting, dose/refill logic, class helpers
-  types/        Domain models: Pet, Medication, Dose, Visit, SymptomEntry
-  index.css     Tailwind entry + design tokens (the only CSS file)
-tests/          Playwright specs, one per screen + navigation
+src/                 React app
+  components/        Shared UI (AppLayout, Sidebar, BottomTabBar, Card, Button, RequireAuth, ...)
+  pages/             One component per route
+  state/             AppStateProvider: loads /api/state, saves every change through the API
+  lib/               Pure helpers shared with the server (dates, dose logic) + API/auth clients
+  data/sample.ts     Sample data builder (relative to a given "today") for seeding
+  types/             Domain types: the contract between frontend and API
+server/              API (Hono)
+  app.ts             The app: middleware, public routes, auth, protected routes
+  routes/            data.ts (state, pets, medications, doses, symptoms), files.ts, dev.ts (test-only)
+  db/schema.ts       Drizzle schema (Better Auth tables + app tables)
+  auth.ts            Better Auth config
+  schedule.ts        Builds each day's doses from reminder times
+  storage.ts         File storage interface + local driver
+  seed.ts            Seeds an account with the sample data
+  *.test.ts          API integration tests
+api/index.ts         Vercel Function entry (wraps server/app.ts)
+drizzle/             SQL migrations (generated; commit them)
+tests/               Playwright specs + fixtures.ts
 ```
 
-## Architecture notes
+## Architecture
 
-- **One data layer.** Every mutation goes through `useAppState()`: `toggleDose`, `addMedication`, `markRefilled`, `addSymptom`, `updatePet`, `addAttachment`. Adding a backend means changing `src/state/AppStateProvider.tsx`; pages and components stay the same.
-- **Fixed "today".** The app treats **Friday, Nov 13, 2026** (`SAMPLE_TODAY`) as today, so the UI and tests always see the same state. A dose's `overdue` flag comes from the sample data; it isn't calculated from the clock yet.
-- **Derived values aren't stored.** Dose status, refill alerts (7 days of supply or less), course progress and the next-dose label are all calculated in `src/lib/meds.ts`.
-- **Layout by screen size.** `md` (768px) is the only layout breakpoint. Small differences use Tailwind responsive classes. Screens whose structure changes (table vs cards, list + details vs timeline, grid vs tabs) render only one version, chosen with `useIsDesktop()`.
+- **One API, three ways to run it.** `server/app.ts` is a plain Hono app. In development, a small Vite plugin (`vite.config.ts`) serves it at `/api` inside the dev server, so there's one process and one port. On Vercel, `api/index.ts` wraps it as a Function. In tests, Vitest calls it in-process with `app.request()`.
+- **Every row belongs to a user.** All app tables have `user_id`, and every query filters on the signed-in user. Requests for another user's records return 404, so they can't even confirm the record exists. Integration tests check this for every write endpoint.
+- **Real dates, in the user's time zone.** The browser sends its local date (`GET /api/state?date=YYYY-MM-DD`). The server creates that day's doses from each active medicine's reminder times, once per medicine per day. A unique index makes this safe when requests run concurrently. "Overdue" is worked out in the browser from the clock and refreshes every 30 seconds. A course's day number comes from its start date.
+- **Fast UI, safe saves.** Marking a dose given updates the screen at once and saves in the background; if saving fails, the change is undone and a message explains why. Forms wait for the server and show its error.
+- **Authentication.** Better Auth uses httpOnly session cookies stored in Postgres (30-day sessions). Passwords need at least 10 characters. In production, sign-in and sign-up are rate-limited, with the limits stored in the database so they work across serverless instances.
+- **Defense in depth.** Secure headers on every response; CSRF origin checks on form and multipart posts; Zod validation of every input (plain-language 400 errors); non-UUID ids return 404 instead of database errors; uploads limited to images/PDF under 4 MB and served with `nosniff`.
 
-## Design system
+### API
 
-Tokens are defined in `src/index.css`, and Tailwind's default palette is turned off, so only these colors exist:
+All routes are under `/api`. Everything except `health`, `config`, `auth/*` and `dev/*` requires a session.
 
-| Token | Use |
+| Method + path | Purpose |
 | --- | --- |
-| `bg`, `surface`, `line`, `divider` | Page background, cards, borders |
-| `ink`, `ink-soft`, `ink-muted` | Text |
-| `primary`, `primary-dark`, `primary-tint` | Actions, "Given", active nav |
-| `warn`, `warn-dark`, `warn-tint`, `warn-line`, `warn-dot` | Overdue, refill, moderate severity |
-| `severe`, `severe-tint` | Severe symptoms, errors |
-| `feature`, `feature-label` | Dark "upcoming visit" cards |
-| `pet-peach(-ink)`, `pet-mint(-ink)` | Mochi and Bantay |
-
-Font: Plus Jakarta Sans. Styling rules: Tailwind classes only (no inline style objects), no gradients, no emoji, light shadows only.
-
-## Accessibility
-
-- Real `<button>`, `<a>`, `<label>` and `<input>` elements, plus a "Skip to content" link
-- Touch targets of at least 44px (`h-11`); `aria-label` on icon-only buttons
-- `aria-pressed` on toggles and filters, `role="tab"` + `aria-selected` on profile tabs, `aria-current="page"` on the active nav link
-- Card sections are `<section aria-labelledby>` landmarks; saved messages use `role="status"` and errors use `role="alert"`
-- Text colors chosen for at least 4.5:1 contrast
+| `GET /health` | Liveness + database check |
+| `GET /config` | `{ allowSignup }` for the sign-in page |
+| `GET, POST /auth/*` | Better Auth (sign-up, sign-in, sign-out, session) |
+| `GET /state?date=` | Everything for the app: pets, medicines, that day's doses, visits, symptoms |
+| `POST /pets`, `PATCH /pets/:id` | Add a pet; edit details |
+| `POST /medications` | Add a medicine and create today's doses |
+| `POST /medications/:id/refill` | Reset a supply to full |
+| `PATCH /doses/:id` `{ given }` | Mark given / not given. Idempotent; adjusts supply once per change. |
+| `POST /symptoms` | Log a symptom entry |
+| `POST /files` (multipart) | Attach a photo/receipt to a visit or symptom |
+| `GET /files/:id` | Download a file (owner only) |
+| `POST /dev/demo-session` | Test-only: a fresh seeded user, signed in |
 
 ## Testing strategy
 
-Three layers, from fastest to slowest:
-
 | Layer | Tool | Where | Covers |
 | --- | --- | --- | --- |
-| Unit | Vitest | `src/**/*.test.ts` | Pure logic in `src/lib/`: date and time formatting, reminder-time parsing, dose status, refill threshold, progress, next-dose labels, schedule building |
-| End-to-end | Playwright | `tests/*.spec.ts` | User flows on every screen, at desktop and phone sizes |
-| Accessibility | axe-core in Playwright | `tests/accessibility.spec.ts` | WCAG 2.1 A/AA checks on all five screens at both sizes |
+| Unit | Vitest | `src/**/*.test.ts` | Date maths and validation, reminder-time parsing, dose status by clock, course day, refill threshold, schedule building |
+| API integration | Vitest + real Postgres | `server/**/*.test.ts` | Auth required; users can't see or change each other's data; validation; daily dose generation (repeated + concurrent calls, course end); supply changes on give/undo; uploads (type, size, CSRF, ownership) |
+| End-to-end | Playwright | `tests/*.spec.ts` | Every screen at desktop + phone size, including sign-in/sign-up/sign-out, data surviving a reload, and rollback when saving fails |
+| Accessibility | axe-core in Playwright | `tests/accessibility.spec.ts` | WCAG 2.1 A/AA on every screen at both sizes, including sign-in and Add a pet |
 
-Playwright runs every spec in two projects:
+How the tests stay isolated and deterministic:
 
-| Project | Device |
-| --- | --- |
-| `desktop` | Desktop Chrome, 1440×900 |
-| `mobile` | Pixel 7 |
+- **Each test gets its own user.** The `page` fixture in `tests/fixtures.ts` and `createTestUser()` in `server/test/client.ts` sign up a brand-new account seeded with the sample data. Tests never share state, so they run fully in parallel against one database with no cleanup step.
+- **A fixed clock.** E2E tests freeze the browser at Friday Nov 13, 2026, 7:30 PM (`page.clock`), and API tests pass that date explicitly. The 6 PM antibiotic is always overdue and the 9 PM ear drops always due.
+- **Elements are found the way a user finds them:** `getByRole`, `getByLabel`, `getByText`, with no test IDs.
+- **CI** (`.github/workflows/ci.yml`) runs Postgres as a service, applies the migrations, and fails if `schema.ts` changed without a migration. It then runs every test layer and uploads the Playwright report.
 
-| Spec | Covers |
-| --- | --- |
-| `navigation.spec.ts` | Sidebar vs tab bar per size; every link opens its screen with `aria-current="page"` |
-| `today.spec.ts` | 2/4 → 3/4 when the overdue antibiotic is given; Overdue pill and strike-through; Undo; progress bar |
-| `medications.spec.ts` | Active/Completed toggle; refill alert and "Mark as refilled"; a new medication appears in the list and on Today |
-| `visits.spec.ts` | Upcoming card; pet filter; details panel updates (desktop) |
-| `log.spec.ts` | Save → confirmation → new entry first in History; validation when no symptom is picked |
-| `pet-profile.spec.ts` | Switching pets changes name, banner and medications; edit profile; phone tabs |
-| `accessibility.spec.ts` | No axe violations (WCAG 2.1 A/AA) on any screen |
+## Moving to Neon, Vercel Blob and Vercel
 
-Conventions:
+The code is set up so this is mostly configuration:
 
-- Locate elements the way a user would: `getByRole`, `getByLabel`, `getByText`. Don't use `data-testid`.
-- Branch on `isMobile` for size-specific flows, or use `test.skip` for UI that exists at only one size.
-- State lives in memory, so move between screens by clicking links (`page.goto` reloads and resets the data).
-- `webServer` starts Vite automatically and reuses a dev server that's already running locally. On CI (`CI=true`) tests retry twice, `test.only` fails the run, and an HTML report is written to `playwright-report/`.
-- Unit tests cover edge cases (noon and midnight, invalid times, the refill boundary at exactly 7 days, year rollover) that would take many slow browser tests to reach.
-
-## CI and deployment
-
-- **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and on every pull request: type-check → unit tests → build → Playwright (E2E + accessibility, both screen sizes). The Playwright report is uploaded as a build artifact.
-- **Vercel** (`vercel.json`): Vite preset, output in `dist/`. Every path except `/api/*` is rewritten to `index.html`, so reloading or sharing a link like `/pets/mochi` doesn't return a 404. `/api/*` is kept free for future serverless functions.
-- Recommended setup: connect the GitHub repo to Vercel and require the CI check to pass before merging to `main`.
+1. **Neon:** create a database, set `DATABASE_URL` to the pooled connection string, and run `npm run db:migrate` against it. The Neon–Vercel integration can create a database branch per preview deployment.
+2. **Vercel Blob:** implement the `vercel-blob` driver in `server/storage.ts` (`@vercel/blob`). Vercel Functions accept request bodies up to 4.5 MB, so upload from the browser straight to Blob ("client uploads") and have the API record the file. Then set `STORAGE_DRIVER=vercel-blob`.
+3. **Vercel:** set the environment variables above with `ALLOW_SIGNUP=false` after creating your account, and **never** set `ENABLE_TEST_ROUTES`. `vercel.json` sends `/api/*` to `api/index.ts` and everything else to the app. That routing hasn't been tested on a real deployment yet, so check `/api/health` and a deep link like `/medications` on the first preview deploy.
 
 ## Known limitations
 
-- No persistence: reloading the page restores the sample data.
-- These buttons do nothing yet: Add a pet, Add visit, Reschedule, Add questions for the vet, notifications.
-- Age, weight, clinic, vaccine date and food are placeholders until you fill them in with **Edit profile**.
-- Weight trend shows placeholder bars until weights are recorded.
+- Not built yet: Add visit, Reschedule, Add questions for the vet, notifications, editing or deleting medicines, recording weights (the weight chart shows placeholder bars).
+- A course past its last day stops getting doses, but it isn't moved to "Completed" automatically yet.
+- Sample placeholder attachments (Photo, Receipt) have no file behind them; uploaded files open in a new tab.
+- There's no password reset yet (it needs an email provider).
 
 ## Roadmap
 
-1. Authentication: the app holds health data and will have a public URL
-2. Backend: Vercel Functions under `/api`, Neon Postgres (Drizzle ORM + migrations), Vercel Blob for photos and receipts
-3. Real dates: clock-based overdue status, time zones, doses generated from reminder times each day
-4. Add pet / add visit / reschedule flows
-5. Reminders: installable PWA + web push, or email, triggered by Vercel Cron
-6. Integration tests for the API against a Neon branch database
-
-Done: Vitest unit tests, axe accessibility checks, CI pipeline, Vercel SPA config.
+1. Deploy: Neon + Vercel Blob driver + first Vercel deploy (see above)
+2. Reminders: installable PWA + web push or email, triggered by a scheduler (Vercel Cron runs at most once a day on the Hobby plan, so consider Upstash QStash)
+3. Add visit / reschedule / questions for the vet; edit and delete medicines; record weights
+4. Password reset and email verification (e.g. Resend)
+5. Error tracking (Sentry) and scheduled database backups

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { doses as sampleDoses, medications as sampleMeds, pets as samplePets } from '../data/sample'
-import type { Dose, Medication } from '../types'
+import type { Dose, Medication, Pet } from '../types'
 import {
   buildSchedule,
+  courseDay,
   daysOfSupplyLeft,
   doseStatus,
   frequencyShort,
@@ -12,29 +12,74 @@ import {
   progressInfo,
 } from './meds'
 
+const TODAY = '2026-11-13'
+const at = (hhmm: string, date = TODAY) => new Date(`${date}T${hhmm}:00`)
+
 function med(overrides: Partial<Medication> = {}): Medication {
   return {
     id: 'm1',
     name: 'Test med',
-    petId: 'mochi',
+    petId: 'p1',
     dose: '1 tablet',
     frequency: 'Once daily',
     reminderTimes: ['08:00'],
     status: 'active',
-    tracking: { kind: 'course', day: 1, totalDays: 10 },
+    startDate: '2026-11-08',
+    tracking: { kind: 'course', totalDays: 14 },
+    completedOn: null,
     ...overrides,
   }
 }
 
 function dose(overrides: Partial<Dose> = {}): Dose {
-  return { id: 'd1', medicationId: 'm1', time: '08:00', given: false, overdue: false, ...overrides }
+  return { id: 'd1', medicationId: 'm1', date: TODAY, time: '08:00', givenAt: null, ...overrides }
+}
+
+const pet: Pet = {
+  id: 'p1',
+  name: 'Bantay',
+  species: 'Dog',
+  breed: 'Aspin',
+  sex: 'Male',
+  age: '',
+  weight: '',
+  neutered: true,
+  color: 'mint',
+  clinic: '',
+  lastVaccine: '',
+  food: '',
+  allergies: '',
+  weightHistory: [],
 }
 
 describe('doseStatus', () => {
-  it('reports given before overdue', () => {
-    expect(doseStatus(dose({ given: true, overdue: true }))).toBe('given')
-    expect(doseStatus(dose({ overdue: true }))).toBe('overdue')
-    expect(doseStatus(dose())).toBe('due')
+  it('is due before its time, overdue after, and given once marked', () => {
+    const d = dose({ time: '18:00' })
+    expect(doseStatus(d, at('17:59'))).toBe('due')
+    expect(doseStatus(d, at('18:00'))).toBe('due')
+    expect(doseStatus(d, at('18:01'))).toBe('overdue')
+    expect(doseStatus({ ...d, givenAt: '2026-11-13T10:00:00Z' }, at('23:00'))).toBe('given')
+  })
+
+  it('treats a dose from a previous day as overdue', () => {
+    expect(doseStatus(dose({ date: '2026-11-12', time: '21:00' }), at('07:00'))).toBe('overdue')
+  })
+})
+
+describe('courseDay', () => {
+  it('counts from the start date, 1-based', () => {
+    expect(courseDay(med(), '2026-11-08')).toBe(1)
+    expect(courseDay(med(), TODAY)).toBe(6)
+    expect(courseDay(med(), '2026-11-21')).toBe(14)
+  })
+
+  it('clamps before the start and after the end', () => {
+    expect(courseDay(med(), '2026-11-01')).toBe(1)
+    expect(courseDay(med(), '2026-12-31')).toBe(14)
+  })
+
+  it('is null for non-course medicines', () => {
+    expect(courseDay(med({ tracking: { kind: 'ongoing' } }), TODAY)).toBeNull()
   })
 })
 
@@ -58,25 +103,19 @@ describe('supply and refills', () => {
     expect(needsRefill({ ...supply(1), status: 'completed' })).toBe(false)
     expect(needsRefill(med())).toBe(false)
   })
-
-  it('flags the sample joint supplement and nothing else', () => {
-    expect(sampleMeds.filter(needsRefill).map((m) => m.id)).toEqual(['joint-supplement'])
-  })
 })
 
 describe('progressInfo', () => {
-  it('describes a course', () => {
-    expect(progressInfo(med({ tracking: { kind: 'course', day: 6, totalDays: 14 } }))).toMatchObject({
-      kind: 'Course',
-      label: 'Day 6 of 14',
-      value: 6,
-      max: 14,
-      low: false,
-    })
+  it('describes a course on a given day', () => {
+    expect(progressInfo(med(), TODAY)).toMatchObject({ kind: 'Course', label: 'Day 6 of 14', value: 6, max: 14, low: false })
+  })
+
+  it('shows a completed course as finished', () => {
+    expect(progressInfo(med({ status: 'completed' }), '2027-01-01').label).toBe('Day 14 of 14')
   })
 
   it('describes a supply and marks it low when a refill is due', () => {
-    expect(progressInfo(med({ tracking: { kind: 'supply', remaining: 5, total: 60 } }))).toMatchObject({
+    expect(progressInfo(med({ tracking: { kind: 'supply', remaining: 5, total: 60 } }), TODAY)).toMatchObject({
       kind: 'Supply',
       label: '5 of 60 left',
       low: true,
@@ -84,19 +123,23 @@ describe('progressInfo', () => {
   })
 
   it('describes an ongoing medicine', () => {
-    expect(progressInfo(med({ tracking: { kind: 'ongoing' } })).label).toBe('No end date')
+    expect(progressInfo(med({ tracking: { kind: 'ongoing' } }), TODAY).label).toBe('No end date')
   })
 })
 
 describe('nextDoseLabel', () => {
   it('uses the earliest dose not yet given today', () => {
-    const doses = [dose({ id: 'a', time: '20:00' }), dose({ id: 'b', time: '08:00', given: true }), dose({ id: 'c', time: '14:00' })]
+    const doses = [
+      dose({ id: 'a', time: '20:00' }),
+      dose({ id: 'b', time: '08:00', givenAt: '2026-11-13T00:00:00Z' }),
+      dose({ id: 'c', time: '14:00' }),
+    ]
     expect(nextDoseLabel(med(), doses)).toBe('Today, 2:00 PM')
   })
 
   it('falls back to tomorrow’s first reminder when today is done', () => {
     const m = med({ reminderTimes: ['20:00', '08:00'] })
-    expect(nextDoseLabel(m, [dose({ given: true })])).toBe('Tomorrow, 8:00 AM')
+    expect(nextDoseLabel(m, [dose({ givenAt: '2026-11-13T00:00:00Z' })])).toBe('Tomorrow, 8:00 AM')
   })
 
   it('ignores other medicines’ doses', () => {
@@ -122,26 +165,29 @@ describe('labels', () => {
   })
 
   it('builds a prescription label, with course length only for courses', () => {
-    const antibiotic = sampleMeds.find((m) => m.id === 'antibiotic')!
+    const antibiotic = med({ name: 'Antibiotic', dose: '1 tablet with food', frequency: 'Twice daily' })
     expect(prescriptionLabel(antibiotic)).toBe('Antibiotic · 1 tablet with food, twice daily, 14 days')
     expect(prescriptionLabel(med({ tracking: { kind: 'ongoing' } }))).toBe('Test med · 1 tablet, once daily')
   })
 })
 
 describe('buildSchedule', () => {
-  it('joins doses with medicine and pet, sorted by time', () => {
-    const rows = buildSchedule(sampleDoses, sampleMeds, samplePets)
+  it('joins doses with medicine and pet, sorted by time, with clock-based status', () => {
+    const doses = [
+      dose({ id: 'late', time: '21:00' }),
+      dose({ id: 'missed', time: '18:00' }),
+      dose({ id: 'done', time: '08:00', givenAt: '2026-11-13T00:00:00Z' }),
+    ]
+    const rows = buildSchedule(doses, [med()], [pet], at('19:30'))
     expect(rows.map((r) => [r.dose.time, r.med.name, r.pet.name, r.status])).toEqual([
-      ['08:00', 'Joint supplement', 'Bantay', 'given'],
-      ['08:30', 'Ear drops', 'Mochi', 'given'],
-      ['18:00', 'Antibiotic', 'Bantay', 'overdue'],
-      ['21:00', 'Ear drops', 'Mochi', 'due'],
+      ['08:00', 'Test med', 'Bantay', 'given'],
+      ['18:00', 'Test med', 'Bantay', 'overdue'],
+      ['21:00', 'Test med', 'Bantay', 'due'],
     ])
   })
 
   it('drops doses whose medicine or pet no longer exists', () => {
-    const orphan = dose({ medicationId: 'missing' })
-    expect(buildSchedule([orphan], sampleMeds, samplePets)).toEqual([])
-    expect(buildSchedule(sampleDoses, sampleMeds, [])).toEqual([])
+    expect(buildSchedule([dose({ medicationId: 'missing' })], [med()], [pet], at('09:00'))).toEqual([])
+    expect(buildSchedule([dose()], [med()], [], at('09:00'))).toEqual([])
   })
 })

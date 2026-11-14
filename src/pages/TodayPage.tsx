@@ -1,4 +1,4 @@
-import { Bell, Check, Plus, Search } from 'lucide-react'
+import { Bell, Check, LogOut, PawPrint, Plus, Search } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { ButtonLink, TextLink } from '../components/Button'
@@ -7,19 +7,19 @@ import { PetAvatar } from '../components/PetAvatar'
 import { ProgressBar } from '../components/ProgressBar'
 import { SectionHeader } from '../components/SectionHeader'
 import { StatusPill, severityDot } from '../components/StatusPill'
+import { SignOutButton } from '../components/SignOutButton'
 import { UpcomingVisitCard } from '../components/UpcomingVisitCard'
-import { SAMPLE_TODAY } from '../data/sample'
 import { cx } from '../lib/cx'
 import { formatLongDate, formatShortDate, formatTime, formatWeekdayShortDate } from '../lib/format'
 import { buildSchedule, daysOfSupplyLeft, needsRefill, type ScheduleRow } from '../lib/meds'
 import { useAppState } from '../state/AppStateContext'
 
 export default function TodayPage() {
-  const { pets, medications, doses, visits, symptoms, toggleDose } = useAppState()
+  const { pets, medications, doses, visits, symptoms, toggleDose, today, now } = useAppState()
   const [query, setQuery] = useState('')
   const scheduleId = useId()
 
-  const schedule = useMemo(() => buildSchedule(doses, medications, pets), [doses, medications, pets])
+  const schedule = useMemo(() => buildSchedule(doses, medications, pets, now), [doses, medications, pets, now])
   const given = schedule.filter((r) => r.status === 'given').length
   const total = schedule.length
   const overdue = schedule.filter((r) => r.status === 'overdue')
@@ -46,20 +46,28 @@ export default function TodayPage() {
     <>
       <header className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-ink-muted md:text-base">{formatLongDate(SAMPLE_TODAY)}</p>
+          <p className="text-sm text-ink-muted md:text-base">{formatLongDate(today)}</p>
           <h1 className="text-4xl font-extrabold tracking-tight">Today</h1>
         </div>
 
-        <button
-          type="button"
-          aria-label={overdue.length ? `Notifications, ${overdue.length} overdue` : 'Notifications'}
-          className="relative flex size-12 items-center justify-center rounded-full border border-line bg-surface md:hidden"
-        >
-          <Bell className="size-5" strokeWidth={2} aria-hidden="true" />
-          {overdue.length > 0 && (
-            <span className="absolute top-2.5 right-2.5 size-2.5 rounded-full bg-warn-dot ring-2 ring-surface" />
-          )}
-        </button>
+        <div className="flex gap-2 md:hidden">
+          <button
+            type="button"
+            aria-label={overdue.length ? `Notifications, ${overdue.length} overdue` : 'Notifications'}
+            className="relative flex size-12 items-center justify-center rounded-full border border-line bg-surface"
+          >
+            <Bell className="size-5" strokeWidth={2} aria-hidden="true" />
+            {overdue.length > 0 && (
+              <span className="absolute top-2.5 right-2.5 size-2.5 rounded-full bg-warn-dot ring-2 ring-surface" />
+            )}
+          </button>
+          <SignOutButton
+            aria-label="Sign out"
+            className="flex size-12 items-center justify-center rounded-full border border-line bg-surface"
+          >
+            <LogOut className="size-5" strokeWidth={2} aria-hidden="true" />
+          </SignOutButton>
+        </div>
 
         <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
           <label className="relative">
@@ -99,14 +107,27 @@ export default function TodayPage() {
             {pet.name}
           </Link>
         ))}
-        <button
-          type="button"
+        <Link
+          to="/pets/new"
           aria-label="Add a pet"
           className="flex size-14 items-center justify-center rounded-full border border-dashed border-ink-muted text-ink-soft"
         >
           <Plus className="size-5" strokeWidth={2} aria-hidden="true" />
-        </button>
+        </Link>
       </nav>
+
+      {pets.length === 0 && (
+        <Card as="section" aria-label="Get started" className="mt-6 flex flex-col items-start gap-4 p-6 md:flex-row md:items-center">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-tint text-primary">
+            <PawPrint className="size-6" strokeWidth={2} aria-hidden="true" />
+          </span>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold">Add your first pet</h2>
+            <p className="text-sm text-ink-muted">Then add their medicines and PetCare builds the daily schedule.</p>
+          </div>
+          <ButtonLink to="/pets/new">Add a pet</ButtonLink>
+        </Card>
+      )}
 
       {/* Summary */}
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -172,7 +193,7 @@ export default function TodayPage() {
 
         {/* Side column */}
         <div className="space-y-6">
-          {upcomingVisit && upcomingPet && <UpcomingVisitCard visit={upcomingVisit} pet={upcomingPet} />}
+          {upcomingVisit && upcomingPet && <UpcomingVisitCard visit={upcomingVisit} pet={upcomingPet} today={today} />}
 
           <SectionCard title="Recent symptoms" action={<TextLink to="/log">Log new</TextLink>}>
             <ul className="mt-2 space-y-4">

@@ -1,5 +1,4 @@
 import { useId } from 'react'
-import { SAMPLE_TODAY } from '../data/sample'
 import { cx } from '../lib/cx'
 import { daysBetween, formatRelativeDays, formatTime, formatWeekdayShortDate } from '../lib/format'
 import type { Pet, Visit } from '../types'
@@ -8,13 +7,14 @@ import { ButtonLink } from './Button'
 interface UpcomingVisitCardProps {
   visit: Visit
   pet: Pet
+  today: string
   className?: string
 }
 
 /** Dark feature card used in Today's side column. */
-export function UpcomingVisitCard({ visit, pet, className }: UpcomingVisitCardProps) {
+export function UpcomingVisitCard({ visit, pet, today, className }: UpcomingVisitCardProps) {
   const id = useId()
-  const days = daysBetween(SAMPLE_TODAY, visit.date)
+  const days = daysBetween(today, visit.date)
   return (
     <section aria-labelledby={id} className={cx('rounded-3xl bg-feature p-6 text-white', className)}>
       <p className="text-xs font-bold tracking-wider text-feature-label uppercase">

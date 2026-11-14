@@ -1,8 +1,11 @@
 import type { Dose, DoseStatus, Medication, Pet } from '../types'
-import { formatShortDate, formatTime } from './format'
+import { daysBetween, formatShortDate, formatTime, localDateTime } from './format'
 
-export const doseStatus = (dose: Dose): DoseStatus =>
-  dose.given ? 'given' : dose.overdue ? 'overdue' : 'due'
+/** Given, or overdue once its scheduled time has passed, otherwise due. */
+export function doseStatus(dose: Dose, now: Date): DoseStatus {
+  if (dose.givenAt) return 'given'
+  return localDateTime(dose.date, dose.time).getTime() < now.getTime() ? 'overdue' : 'due'
+}
 
 const dosesPerDay: Record<Medication['frequency'], number> = {
   'Once daily': 1,
@@ -24,6 +27,13 @@ export function needsRefill(med: Medication): boolean {
   return med.status === 'active' && days !== null && days <= REFILL_THRESHOLD_DAYS
 }
 
+/** Day N of a course on `today` (1-based, clamped to the course length), or null for non-courses. */
+export function courseDay(med: Medication, today: string): number | null {
+  if (med.tracking.kind !== 'course') return null
+  const day = daysBetween(med.startDate, today) + 1
+  return Math.min(Math.max(day, 1), med.tracking.totalDays)
+}
+
 export interface ProgressInfo {
   /** "Course", "Supply" or "Ongoing" */
   kind: string
@@ -34,11 +44,13 @@ export interface ProgressInfo {
   low: boolean
 }
 
-export function progressInfo(med: Medication): ProgressInfo {
+export function progressInfo(med: Medication, today: string): ProgressInfo {
   const t = med.tracking
   switch (t.kind) {
-    case 'course':
-      return { kind: 'Course', label: `Day ${t.day} of ${t.totalDays}`, value: t.day, max: t.totalDays, low: false }
+    case 'course': {
+      const day = med.status === 'completed' ? t.totalDays : (courseDay(med, today) ?? 1)
+      return { kind: 'Course', label: `Day ${day} of ${t.totalDays}`, value: day, max: t.totalDays, low: false }
+    }
     case 'supply':
       return {
         kind: 'Supply',
@@ -58,7 +70,7 @@ export function nextDoseLabel(med: Medication, todaysDoses: Dose[]): string {
     return med.completedOn ? `Finished ${formatShortDate(med.completedOn)}` : 'Finished'
   }
   const pendingToday = todaysDoses
-    .filter((d) => d.medicationId === med.id && !d.given)
+    .filter((d) => d.medicationId === med.id && !d.givenAt)
     .sort((a, b) => a.time.localeCompare(b.time))[0]
   if (pendingToday) return `Today, ${formatTime(pendingToday.time)}`
   const first = [...med.reminderTimes].sort()[0]
@@ -92,12 +104,12 @@ export interface ScheduleRow {
   status: DoseStatus
 }
 
-export function buildSchedule(doses: Dose[], meds: Medication[], pets: Pet[]): ScheduleRow[] {
+export function buildSchedule(doses: Dose[], meds: Medication[], pets: Pet[], now: Date): ScheduleRow[] {
   const rows: ScheduleRow[] = []
   for (const dose of doses) {
     const med = meds.find((m) => m.id === dose.medicationId)
     const pet = med && pets.find((p) => p.id === med.petId)
-    if (med && pet) rows.push({ dose, med, pet, status: doseStatus(dose) })
+    if (med && pet) rows.push({ dose, med, pet, status: doseStatus(dose, now) })
   }
   return rows.sort((a, b) => a.dose.time.localeCompare(b.dose.time))
 }
