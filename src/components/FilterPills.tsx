@@ -1,4 +1,5 @@
 import { cx } from '../lib/cx'
+import { chipClasses } from './choice'
 import type { SegmentOption } from './SegmentedControl'
 
 interface FilterPillsProps<T extends string> {
@@ -21,10 +22,7 @@ export function FilterPills<T extends string>({ label, options, value, onChange,
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(option.value)}
-            className={cx(
-              'h-11 rounded-full border px-5 text-sm font-semibold transition-colors',
-              selected ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink hover:bg-divider',
-            )}
+            className={chipClasses(selected, 'px-5')}
           >
             {option.label}
           </button>

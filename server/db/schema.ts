@@ -182,16 +182,27 @@ export const visits = pgTable(
     petId: uuid('pet_id')
       .notNull()
       .references(() => pets.id, { onDelete: 'cascade' }),
+    /** One of VISIT_TYPES. */
+    type: text('type').notNull().default('Other'),
+    /** "scheduled" | "completed" */
+    status: text('status').notNull().default('completed'),
     date: isoDate('date').notNull(),
-    time: text('time').notNull(),
+    /** "HH:mm", or null when unknown. */
+    time: text('time'),
+    /** Reason for the visit. */
     title: text('title').notNull(),
     clinic: text('clinic').notNull().default(''),
-    summary: text('summary').notNull().default(''),
+    /** Diagnosis or findings. Stored in the original "summary" column. */
+    diagnosis: text('summary').notNull().default(''),
+    treatment: text('treatment').notNull().default(''),
     notes: text('notes').notNull().default(''),
+    cost: numeric('cost', { precision: 10, scale: 2, mode: 'number' }),
+    /** Days before a scheduled visit to show a reminder; null = none. */
+    reminderDays: integer('reminder_days'),
     weightLogged: boolean('weight_logged').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [index('visits_user_id_idx').on(t.userId)],
+  (t) => [index('visits_user_id_idx').on(t.userId), index('visits_pet_id_idx').on(t.petId)],
 )
 
 export const visitPrescriptions = pgTable(

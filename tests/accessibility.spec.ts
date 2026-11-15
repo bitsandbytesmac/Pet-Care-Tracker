@@ -8,7 +8,9 @@ const screens = [
   { name: 'Add a pet', path: '/pets/new' },
   { name: 'Medications', path: '/medications' },
   { name: 'Vet visits', path: '/visits' },
-  { name: 'Log a symptom', path: '/log' },
+  { name: 'Log a vet visit', path: '/visits?new=completed' },
+  { name: 'Schedule an appointment', path: '/visits?new=scheduled' },
+  { name: 'Symptom log', path: '/log' },
 ]
 
 async function expectNoViolations(page: import('@playwright/test').Page) {
@@ -34,4 +36,12 @@ test.describe('accessibility (axe, WCAG 2.1 AA)', () => {
       await expectNoViolations(page)
     })
   }
+
+  test('Delete pet confirmation has no detectable violations', async ({ page }) => {
+    await page.goto('/pets')
+    await page.getByRole('button', { name: /^Edit/ }).filter({ visible: true }).click()
+    await page.getByRole('button', { name: 'Delete Mochi' }).click()
+    await expect(page.getByRole('dialog', { name: 'Delete Mochi?' })).toBeVisible()
+    await expectNoViolations(page)
+  })
 })

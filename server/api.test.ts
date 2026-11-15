@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AppData, Attachment, Dose, Medication, Pet, SymptomEntry } from '../src/types'
+import type { AppData, Attachment, Dose, Medication, Pet, SymptomEntry, Visit, VisitInput } from '../src/types'
 import { app } from './app'
 import { ORIGIN, TODAY, createTestUser } from './test/client'
 
@@ -62,8 +62,8 @@ describe('GET /api/state', () => {
       ['18:00', false],
       ['21:00', false],
     ])
-    expect(data.visits.filter((v) => v.upcoming).map((v) => [v.title, v.date])).toEqual([
-      ['Annual check-up & vaccines', '2026-11-17'],
+    expect(data.visits.filter((v) => v.status === 'scheduled').map((v) => [v.title, v.type, v.date, v.reminderDays])).toEqual([
+      ['Annual check-up & vaccines', 'Vaccination', '2026-11-17', 1],
     ])
     expect(data.symptoms[0]?.title).toBe('Scratching left ear')
     expect(byName(data, 'Antibiotic').startDate).toBe('2026-11-08')
@@ -162,7 +162,7 @@ describe('data isolation between users', () => {
     const pet = aliceData.pets[0]!
     const dose = aliceData.doses[2]!
     const med = byName(aliceData, 'Joint supplement')
-    const visit = aliceData.visits.find((v) => !v.upcoming)!
+    const visit = aliceData.visits.find((v) => v.status === 'completed')!
 
     const bobData = await bob.state()
     expect(bobData.pets.map((p) => p.id)).not.toContain(pet.id)
@@ -180,14 +180,29 @@ describe('data isolation between users', () => {
         body: { petId: pet.id, date: TODAY, time: '10:00', symptoms: ['Vomiting'], severity: 'Mild' },
       }),
       bob.request('/api/files', { method: 'POST', body: uploadForm('visit', visit.id, pngFile()) }),
+      bob.json('/api/visits', { method: 'POST', body: visitBody(pet.id) }),
+      bob.json(`/api/visits/${visit.id}`, { method: 'PATCH', body: visitBody(pet.id, { title: 'hacked' }) }),
+      bob.json(`/api/visits/${visit.id}`, { method: 'DELETE' }),
+      bob.json(`/api/pets/${pet.id}`, { method: 'DELETE' }),
     ])
-    expect(attempts.map((r) => r.status)).toEqual([404, 404, 404, 404, 404, 404])
+    expect(attempts.map((r) => r.status)).toEqual([404, 404, 404, 404, 404, 404, 404, 404, 404, 404])
 
     // Alice's data is unchanged.
     const after = await alice.state()
     expect(after.doses.find((d) => d.id === dose.id)?.givenAt).toBeNull()
     expect(after.pets[0]?.age).toBe(pet.age)
     expect(byName(after, 'Joint supplement').tracking).toEqual(med.tracking)
+    expect(after.pets.map((p) => p.id)).toContain(pet.id)
+    expect(after.visits.find((v) => v.id === visit.id)?.title).toBe(visit.title)
+  })
+
+  it('does not let a visit be moved to another user’s pet', async () => {
+    const alice = await createTestUser()
+    const bob = await createTestUser()
+    const alicePet = (await alice.state()).pets[0]!
+    const bobVisit = (await bob.state()).visits[0]!
+    const res = await bob.json(`/api/visits/${bobVisit.id}`, { method: 'PATCH', body: visitBody(alicePet.id) })
+    expect(res.status).toBe(404)
   })
 })
 
@@ -290,7 +305,7 @@ function uploadForm(ownerType: string, ownerId: string, file: File, kind?: strin
 describe('files', () => {
   it('uploads a photo to a visit and downloads it back', async () => {
     const user = await createTestUser()
-    const visit = (await user.state()).visits.find((v) => !v.upcoming)!
+    const visit = (await user.state()).visits.find((v) => v.status === 'completed')!
 
     const res = await user.request('/api/files', { method: 'POST', body: uploadForm('visit', visit.id, pngFile()) })
     expect(res.status).toBe(201)
@@ -346,5 +361,158 @@ describe('files', () => {
     const placeholder = (await user.state()).visits.flatMap((v) => v.attachments)[0]!
     expect(placeholder.url).toBeNull()
     expect((await user.request(`/api/files/${placeholder.id}`)).status).toBe(404)
+  })
+})
+
+function visitBody(petId: string, overrides: Partial<VisitInput> = {}): VisitInput {
+  return {
+    petId,
+    type: 'Vaccination',
+    status: 'completed',
+    date: TODAY,
+    time: '10:30',
+    title: 'Rabies booster',
+    clinic: 'Happy Paws Clinic',
+    diagnosis: 'Healthy',
+    treatment: 'Rabies vaccine',
+    notes: '',
+    cost: 850,
+    reminderDays: null,
+    ...overrides,
+  }
+}
+
+describe('visits', () => {
+  it('logs a past visit and returns it in the state', async () => {
+    const user = await createTestUser()
+    const pet = (await user.state()).pets[0]!
+    const res = await user.json<Visit>('/api/visits', {
+      method: 'POST',
+      body: visitBody(pet.id, { title: '  Rabies booster ', cost: 850.456, reminderDays: 3 }),
+    })
+    expect(res.status).toBe(201)
+    expect(res.body).toMatchObject({
+      petId: pet.id,
+      type: 'Vaccination',
+      status: 'completed',
+      title: 'Rabies booster',
+      cost: 850.46,
+      // Reminders only apply to scheduled visits.
+      reminderDays: null,
+      prescriptionIds: [],
+      attachments: [],
+    })
+    expect((await user.state()).visits.find((v) => v.id === res.body.id)).toEqual(res.body)
+  })
+
+  it('schedules an appointment without a time, then marks it done', async () => {
+    const user = await createTestUser()
+    const pet = (await user.state()).pets[1]!
+    const created = await user.json<Visit>('/api/visits', {
+      method: 'POST',
+      body: visitBody(pet.id, { type: 'Deworming', status: 'scheduled', date: '2026-12-01', time: null, reminderDays: 7, cost: null }),
+    })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({ status: 'scheduled', time: null, reminderDays: 7, cost: null })
+
+    const done = await user.json<Visit>(`/api/visits/${created.body.id}`, {
+      method: 'PATCH',
+      body: visitBody(pet.id, { type: 'Deworming', status: 'completed', date: TODAY, reminderDays: 7, diagnosis: 'All clear' }),
+    })
+    expect(done.status).toBe(200)
+    expect(done.body).toMatchObject({ status: 'completed', date: TODAY, diagnosis: 'All clear', reminderDays: null })
+  })
+
+  it('keeps prescriptions and attachments when a visit is edited', async () => {
+    const user = await createTestUser()
+    const data = await user.state()
+    const visit = data.visits.find((v) => v.title === 'Skin infection on hind leg')!
+    const res = await user.json<Visit>(`/api/visits/${visit.id}`, {
+      method: 'PATCH',
+      body: visitBody(visit.petId, { type: 'Consultation', date: visit.date, title: 'Skin infection (left hind leg)' }),
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.title).toBe('Skin infection (left hind leg)')
+    expect(res.body.prescriptionIds).toEqual(visit.prescriptionIds)
+    expect(res.body.attachments.map((a) => a.id)).toEqual(visit.attachments.map((a) => a.id))
+  })
+
+  it('validates visits', async () => {
+    const user = await createTestUser()
+    const pet = (await user.state()).pets[0]!
+    const bad = await Promise.all([
+      user.json<{ error: string }>('/api/visits', { method: 'POST', body: visitBody(pet.id, { title: '  ' }) }),
+      user.json('/api/visits', { method: 'POST', body: { ...visitBody(pet.id), type: 'Grooming' } }),
+      user.json('/api/visits', { method: 'POST', body: visitBody(pet.id, { cost: -5 }) }),
+      user.json('/api/visits', { method: 'POST', body: visitBody(pet.id, { status: 'scheduled', reminderDays: 2 }) }),
+      user.json('/api/visits', { method: 'POST', body: visitBody(pet.id, { time: '25:00' }) }),
+    ])
+    expect(bad.map((r) => r.status)).toEqual([400, 400, 400, 400, 400])
+    expect(bad[0]!.body.error).toContain('title')
+  })
+
+  it('deletes a visit with its stored files and keeps the prescribed medicine', async () => {
+    const user = await createTestUser()
+    const data = await user.state()
+    const visit = data.visits.find((v) => v.title === 'Skin infection on hind leg')!
+    const upload = await user.request('/api/files', { method: 'POST', body: uploadForm('visit', visit.id, pngFile()) })
+    const attachment = (await upload.json()) as Attachment
+
+    const res = await user.request(`/api/visits/${visit.id}`, { method: 'DELETE' })
+    expect(res.status).toBe(204)
+
+    const after = await user.state()
+    expect(after.visits.map((v) => v.id)).not.toContain(visit.id)
+    expect(after.medications.map((m) => m.id)).toEqual(expect.arrayContaining(visit.prescriptionIds))
+    expect((await user.request(attachment.url!)).status).toBe(404)
+    expect((await user.request(`/api/visits/${visit.id}`, { method: 'DELETE' })).status).toBe(404)
+  })
+})
+
+describe('DELETE /api/pets/:id', () => {
+  it('removes the pet and all of its records, and nothing else', async () => {
+    const user = await createTestUser()
+    const before = await user.state()
+    const bantay = before.pets.find((p) => p.name === 'Bantay')!
+    const mochi = before.pets.find((p) => p.name === 'Mochi')!
+    const bantayVisit = before.visits.find((v) => v.petId === bantay.id && v.status === 'completed')!
+    const bantaySymptom = before.symptoms.find((s) => s.petId === bantay.id)!
+
+    const visitFile = (await (
+      await user.request('/api/files', { method: 'POST', body: uploadForm('visit', bantayVisit.id, pngFile()) })
+    ).json()) as Attachment
+    const symptomFile = (await (
+      await user.request('/api/files', { method: 'POST', body: uploadForm('symptom', bantaySymptom.id, pngFile()) })
+    ).json()) as Attachment
+
+    const res = await user.request(`/api/pets/${bantay.id}`, { method: 'DELETE' })
+    expect(res.status).toBe(204)
+
+    const after = await user.state()
+    expect(after.pets.map((p) => p.name)).toEqual(['Mochi'])
+    expect(after.medications.every((m) => m.petId === mochi.id)).toBe(true)
+    expect(after.visits.every((v) => v.petId === mochi.id)).toBe(true)
+    expect(after.symptoms.every((s) => s.petId === mochi.id)).toBe(true)
+    const mochiMeds = new Set(after.medications.map((m) => m.id))
+    expect(after.doses.every((d) => mochiMeds.has(d.medicationId))).toBe(true)
+    // Mochi's records are untouched.
+    expect(after.medications).toEqual(before.medications.filter((m) => m.petId === mochi.id))
+    expect(after.visits.length).toBe(before.visits.filter((v) => v.petId === mochi.id).length)
+
+    // Uploaded files are gone too.
+    expect((await user.request(visitFile.url!)).status).toBe(404)
+    expect((await user.request(symptomFile.url!)).status).toBe(404)
+
+    expect((await user.request(`/api/pets/${bantay.id}`, { method: 'DELETE' })).status).toBe(404)
+  })
+
+  it('deletes a pet with no records', async () => {
+    const user = await createTestUser({ seed: false })
+    const pet = await user.json<Pet>('/api/pets', {
+      method: 'POST',
+      body: { name: 'Kuting', species: 'Cat', sex: 'Female', color: 'peach' },
+    })
+    expect((await user.request(`/api/pets/${pet.body.id}`, { method: 'DELETE' })).status).toBe(204)
+    expect((await user.state()).pets).toEqual([])
   })
 })

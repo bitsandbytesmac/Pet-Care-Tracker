@@ -1,8 +1,10 @@
-import { Bell, Check, LogOut, PawPrint, Plus, Search } from 'lucide-react'
+import { Check, LogOut, PawPrint, Plus, Search } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { ButtonLink, TextLink } from '../components/Button'
 import { Card, SectionCard } from '../components/Card'
+import { inputClass } from '../components/Field'
+import { PageHeader } from '../components/PageHeader'
 import { PetAvatar } from '../components/PetAvatar'
 import { ProgressBar } from '../components/ProgressBar'
 import { SectionHeader } from '../components/SectionHeader'
@@ -10,12 +12,15 @@ import { StatusPill, severityDot } from '../components/StatusPill'
 import { SignOutButton } from '../components/SignOutButton'
 import { UpcomingVisitCard } from '../components/UpcomingVisitCard'
 import { cx } from '../lib/cx'
-import { formatLongDate, formatShortDate, formatTime, formatWeekdayShortDate } from '../lib/format'
+import { formatLongDate, formatShortDate, formatTime } from '../lib/format'
 import { buildSchedule, daysOfSupplyLeft, needsRefill, type ScheduleRow } from '../lib/meds'
+import { useIsDesktop } from '../lib/useMediaQuery'
+import { scheduledVisits } from '../lib/visits'
 import { useAppState } from '../state/AppStateContext'
 
 export default function TodayPage() {
   const { pets, medications, doses, visits, symptoms, toggleDose, today, now } = useAppState()
+  const isDesktop = useIsDesktop()
   const [query, setQuery] = useState('')
   const scheduleId = useId()
 
@@ -25,7 +30,7 @@ export default function TodayPage() {
   const overdue = schedule.filter((r) => r.status === 'overdue')
   const next = schedule.find((r) => r.status !== 'given')
 
-  const upcomingVisit = visits.filter((v) => v.upcoming).sort((a, b) => a.date.localeCompare(b.date))[0]
+  const upcomingVisit = scheduledVisits(visits)[0]
   const upcomingPet = upcomingVisit && pets.find((p) => p.id === upcomingVisit.petId)
   const refill = medications.find(needsRefill)
   const refillPet = refill && pets.find((p) => p.id === refill.petId)
@@ -44,73 +49,62 @@ export default function TodayPage() {
 
   return (
     <>
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-ink-muted md:text-base">{formatLongDate(today)}</p>
-          <h1 className="text-4xl font-extrabold tracking-tight">Today</h1>
-        </div>
-
-        <div className="flex gap-2 md:hidden">
-          <button
-            type="button"
-            aria-label={overdue.length ? `Notifications, ${overdue.length} overdue` : 'Notifications'}
-            className="relative flex size-12 items-center justify-center rounded-full border border-line bg-surface"
-          >
-            <Bell className="size-5" strokeWidth={2} aria-hidden="true" />
-            {overdue.length > 0 && (
-              <span className="absolute top-2.5 right-2.5 size-2.5 rounded-full bg-warn-dot ring-2 ring-surface" />
-            )}
-          </button>
-          <SignOutButton
-            aria-label="Sign out"
-            className="flex size-12 items-center justify-center rounded-full border border-line bg-surface"
-          >
-            <LogOut className="size-5" strokeWidth={2} aria-hidden="true" />
-          </SignOutButton>
-        </div>
-
-        <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
-          <label className="relative">
-            <span className="sr-only">Search today's schedule</span>
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-muted"
-              strokeWidth={2}
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search today's schedule"
-              className="h-11 w-60 rounded-xl border border-line bg-surface pr-3 pl-9 text-sm placeholder:text-ink-muted"
-            />
-          </label>
-          <ButtonLink to="/log" variant="outline">
-            Log symptom
-          </ButtonLink>
-          <ButtonLink to="/medications" variant="primary">
-            <Plus className="size-4" strokeWidth={2} aria-hidden="true" />
-            Add medication
-          </ButtonLink>
-        </div>
-      </header>
+      <PageHeader
+        title="Today"
+        subtitle={formatLongDate(today)}
+        actions={
+          isDesktop ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="relative">
+                <span className="sr-only">Search today's schedule</span>
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-muted"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search today's schedule"
+                  className={cx(inputClass, 'w-60 pl-9')}
+                />
+              </label>
+              <ButtonLink to="/log" variant="outline">
+                Log symptom
+              </ButtonLink>
+              <ButtonLink to="/medications" variant="primary">
+                <Plus className="size-4" strokeWidth={2} aria-hidden="true" />
+                Add medication
+              </ButtonLink>
+            </div>
+          ) : (
+            <SignOutButton
+              aria-label="Sign out"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-ink-soft hover:text-ink"
+            >
+              <LogOut className="size-5" strokeWidth={2} aria-hidden="true" />
+            </SignOutButton>
+          )
+        }
+      />
 
       {/* Phone: pet chips */}
-      <nav aria-label="Your pets" className="mt-5 flex flex-wrap gap-3 md:hidden">
+      <nav aria-label="Your pets" className="mt-5 flex flex-wrap gap-2 md:hidden">
         {pets.map((pet) => (
           <Link
             key={pet.id}
             to={`/pets/${pet.id}`}
-            className="flex h-14 items-center gap-3 rounded-full border border-line bg-surface pr-5 pl-2 text-base font-medium"
+            className="flex h-12 items-center gap-2.5 rounded-full border border-line bg-surface pr-4 pl-1.5 text-sm font-semibold hover:bg-divider"
           >
-            <PetAvatar pet={pet} size="lg" />
+            <PetAvatar pet={pet} size="md" />
             {pet.name}
           </Link>
         ))}
         <Link
           to="/pets/new"
           aria-label="Add a pet"
-          className="flex size-14 items-center justify-center rounded-full border border-dashed border-ink-muted text-ink-soft"
+          className="flex size-12 items-center justify-center rounded-full border border-dashed border-ink-muted text-ink-soft hover:bg-divider"
         >
           <Plus className="size-5" strokeWidth={2} aria-hidden="true" />
         </Link>
@@ -130,8 +124,8 @@ export default function TodayPage() {
       )}
 
       {/* Summary */}
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <section aria-labelledby="doses-heading" className="rounded-3xl bg-primary p-6 text-white">
+      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section aria-labelledby="doses-heading" className="rounded-2xl bg-primary p-5 text-white md:col-span-2 md:p-6 xl:col-span-1">
           <div className="flex items-baseline justify-between gap-3 xl:block">
             <h2 id="doses-heading" className="text-lg font-semibold xl:text-sm xl:font-medium">
               Doses given
@@ -150,11 +144,6 @@ export default function TodayPage() {
           valueClassName={overdue.length ? 'text-warn' : 'text-ink'}
           detail={overdue[0] ? `${overdue[0].med.name} for ${overdue[0].pet.name}` : 'Nothing overdue'}
         />
-        <StatTile
-          label="Next vet visit"
-          value={upcomingVisit ? formatWeekdayShortDate(upcomingVisit.date) : 'None booked'}
-          detail={upcomingVisit && upcomingPet ? `${upcomingPet.name} · ${formatTime(upcomingVisit.time)}` : ''}
-        />
         {refill && refillPet ? (
           <StatTile
             tone="warn"
@@ -169,7 +158,7 @@ export default function TodayPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         {/* Schedule */}
-        <section aria-labelledby={scheduleId} className="md:rounded-3xl md:border md:border-line md:bg-surface md:p-6">
+        <section aria-labelledby={scheduleId} className="md:rounded-2xl md:border md:border-line md:bg-surface md:p-6">
           <SectionHeader
             id={scheduleId}
             title="Medication schedule"
@@ -196,7 +185,8 @@ export default function TodayPage() {
           {upcomingVisit && upcomingPet && <UpcomingVisitCard visit={upcomingVisit} pet={upcomingPet} today={today} />}
 
           <SectionCard title="Recent symptoms" action={<TextLink to="/log">Log new</TextLink>}>
-            <ul className="mt-2 space-y-4">
+            {symptoms.length === 0 && <p className="mt-2 text-sm text-ink-muted">Nothing logged yet.</p>}
+            <ul className="mt-2 space-y-4 empty:hidden">
               {symptoms.slice(0, 3).map((entry) => {
                 const pet = pets.find((p) => p.id === entry.petId)
                 return (

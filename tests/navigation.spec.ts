@@ -8,7 +8,7 @@ const desktopLinks = [
   { name: 'Pets', path: PET_URL, heading: 'Mochi' },
   { name: 'Medications', path: /\/medications$/, heading: 'Medications' },
   { name: 'Vet visits', path: /\/visits$/, heading: 'Vet visits' },
-  { name: 'Symptom log', path: /\/log$/, heading: /symptom log/i },
+  { name: 'Symptom log', path: /\/log$/, heading: 'Symptom log' },
 ]
 
 const mobileLinks = [
@@ -16,7 +16,7 @@ const mobileLinks = [
   { name: 'Pets', path: PET_URL, heading: 'Mochi' },
   { name: 'Meds', path: /\/medications$/, heading: 'Medications' },
   { name: 'Visits', path: /\/visits$/, heading: 'Vet visits' },
-  { name: 'Log', path: /\/log$/, heading: /log a symptom/i },
+  { name: 'Log', path: /\/log$/, heading: 'Symptom log' },
 ]
 
 test.describe('navigation', () => {

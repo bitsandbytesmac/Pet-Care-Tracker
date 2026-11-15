@@ -1,22 +1,48 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { FREQUENCIES, PET_COLORS, SEVERITIES, SEXES, SPECIES, SYMPTOM_KINDS, type AppData, type Attachment } from '../../src/types'
+import {
+  FREQUENCIES,
+  PET_COLORS,
+  REMINDER_DAYS,
+  SEVERITIES,
+  SEXES,
+  SPECIES,
+  SYMPTOM_KINDS,
+  VISIT_STATUSES,
+  VISIT_TYPES,
+  type AppData,
+  type Attachment,
+} from '../../src/types'
 import { getDb, type Db } from '../db/client'
 import { doses, files, medications, pets, symptoms, visitPrescriptions, visits, weightRecords } from '../db/schema'
 import { toAttachment, toDose, toMedication, toPet, toSymptom, toVisit } from '../mappers'
 import { ensureDosesForDate } from '../schedule'
+import { getStorage } from '../storage'
 import { isoDateSchema, notFound, parse, pathId, readJson, timeSchema, type AppEnv } from '../http'
 
 const text = (max: number) => z.string().trim().max(max)
 const requiredText = (max: number) => text(max).min(1, 'Required')
 
-async function assertOwnsPet(db: Db, userId: string, petId: string): Promise<void> {
+async function assertOwnsPet(db: Pick<Db, 'select'>, userId: string, petId: string): Promise<void> {
   const [row] = await db
     .select({ id: pets.id })
     .from(pets)
     .where(and(eq(pets.id, petId), eq(pets.userId, userId)))
   if (!row) throw notFound('Pet not found')
+}
+
+/**
+ * Remove stored uploads after their rows are deleted. Best effort: a leftover file is
+ * unreachable (its row is gone), so a storage hiccup shouldn't fail the user's delete.
+ */
+async function removeStoredFiles(keys: (string | null)[]): Promise<void> {
+  const storage = getStorage()
+  await Promise.all(
+    keys
+      .filter((k): k is string => k !== null)
+      .map((key) => storage.delete(key).catch((error: unknown) => console.error(`Could not delete stored file ${key}`, error))),
+  )
 }
 
 export const dataRoutes = new Hono<AppEnv>()
@@ -77,7 +103,6 @@ dataRoutes.get('/state', async (c) => {
         v,
         rxRows.filter((r) => r.visitId === v.id).map((r) => r.medicationId),
         filesByOwner.get(`visit:${v.id}`) ?? [],
-        date,
       ),
     ),
     symptoms: symptomRows.map((s) => toSymptom(s, filesByOwner.get(`symptom:${s.id}`)?.[0] ?? null)),
@@ -128,6 +153,125 @@ dataRoutes.patch('/pets/:id', async (c) => {
   if (!row) throw notFound('Pet not found')
   const weights = await db.select().from(weightRecords).where(eq(weightRecords.petId, id)).orderBy(asc(weightRecords.date))
   return c.json(toPet(row, weights.map((w) => ({ date: w.date, kg: w.kg }))))
+})
+
+/**
+ * Delete a pet and everything recorded for it. Medicines, doses, visits, symptoms and weights
+ * go by foreign-key cascade; uploaded files have no foreign key, so they are removed here.
+ */
+dataRoutes.delete('/pets/:id', async (c) => {
+  const id = pathId(c)
+  const userId = c.get('userId')
+  const removedKeys = await getDb().transaction(async (tx) => {
+    await assertOwnsPet(tx, userId, id)
+    const [visitRows, symptomRows] = await Promise.all([
+      tx.select({ id: visits.id }).from(visits).where(and(eq(visits.petId, id), eq(visits.userId, userId))),
+      tx.select({ id: symptoms.id }).from(symptoms).where(and(eq(symptoms.petId, id), eq(symptoms.userId, userId))),
+    ])
+    const owners = [
+      ...(visitRows.length ? [and(eq(files.ownerType, 'visit'), inArray(files.ownerId, visitRows.map((v) => v.id)))] : []),
+      ...(symptomRows.length
+        ? [and(eq(files.ownerType, 'symptom'), inArray(files.ownerId, symptomRows.map((s) => s.id)))]
+        : []),
+    ]
+    const removed = owners.length
+      ? await tx
+          .delete(files)
+          .where(and(eq(files.userId, userId), or(...owners)))
+          .returning({ storageKey: files.storageKey })
+      : []
+    await tx.delete(pets).where(and(eq(pets.id, id), eq(pets.userId, userId)))
+    return removed.map((f) => f.storageKey)
+  })
+  await removeStoredFiles(removedKeys)
+  return c.body(null, 204)
+})
+
+// --- Visits -----------------------------------------------------------------
+
+const visitSchema = z.object({
+  petId: z.uuid(),
+  type: z.enum(VISIT_TYPES),
+  status: z.enum(VISIT_STATUSES),
+  date: isoDateSchema,
+  time: timeSchema.nullable().default(null),
+  title: requiredText(120),
+  clinic: text(120).default(''),
+  diagnosis: text(2000).default(''),
+  treatment: text(2000).default(''),
+  notes: text(2000).default(''),
+  cost: z.number().nonnegative().max(99_999_999).nullable().default(null),
+  reminderDays: z
+    .int()
+    .refine((d) => (REMINDER_DAYS as readonly number[]).includes(d), `Reminder must be one of ${REMINDER_DAYS.join(', ')} days`)
+    .nullable()
+    .default(null),
+})
+
+/** Normalize a validated visit for storage: cents precision; reminders only for scheduled visits. */
+function visitValues(input: z.infer<typeof visitSchema>) {
+  return {
+    ...input,
+    cost: input.cost === null ? null : Math.round(input.cost * 100) / 100,
+    reminderDays: input.status === 'scheduled' ? input.reminderDays : null,
+  }
+}
+
+dataRoutes.post('/visits', async (c) => {
+  const userId = c.get('userId')
+  const input = parse(visitSchema, await readJson(c))
+  const db = getDb()
+  await assertOwnsPet(db, userId, input.petId)
+  const [row] = await db
+    .insert(visits)
+    .values({ ...visitValues(input), userId })
+    .returning()
+  return c.json(toVisit(row!, [], []), 201)
+})
+
+/** Replace a visit's details (the edit form sends every field). Also used to mark an appointment done. */
+dataRoutes.patch('/visits/:id', async (c) => {
+  const id = pathId(c)
+  const userId = c.get('userId')
+  const input = parse(visitSchema, await readJson(c))
+  const db = getDb()
+  await assertOwnsPet(db, userId, input.petId)
+  const [row] = await db
+    .update(visits)
+    .set(visitValues(input))
+    .where(and(eq(visits.id, id), eq(visits.userId, userId)))
+    .returning()
+  if (!row) throw notFound('Visit not found')
+
+  const [rxRows, fileRows] = await Promise.all([
+    db.select({ medicationId: visitPrescriptions.medicationId }).from(visitPrescriptions).where(eq(visitPrescriptions.visitId, id)),
+    db
+      .select()
+      .from(files)
+      .where(and(eq(files.userId, userId), eq(files.ownerType, 'visit'), eq(files.ownerId, id)))
+      .orderBy(asc(files.createdAt)),
+  ])
+  return c.json(toVisit(row, rxRows.map((r) => r.medicationId), fileRows.map(toAttachment)))
+})
+
+/** Delete a visit and its attachments. Linked medicines stay; only the link is removed. */
+dataRoutes.delete('/visits/:id', async (c) => {
+  const id = pathId(c)
+  const userId = c.get('userId')
+  const removedKeys = await getDb().transaction(async (tx) => {
+    const [row] = await tx
+      .delete(visits)
+      .where(and(eq(visits.id, id), eq(visits.userId, userId)))
+      .returning({ id: visits.id })
+    if (!row) throw notFound('Visit not found')
+    const removed = await tx
+      .delete(files)
+      .where(and(eq(files.userId, userId), eq(files.ownerType, 'visit'), eq(files.ownerId, id)))
+      .returning({ storageKey: files.storageKey })
+    return removed.map((f) => f.storageKey)
+  })
+  await removeStoredFiles(removedKeys)
+  return c.body(null, 204)
 })
 
 // --- Medications ------------------------------------------------------------

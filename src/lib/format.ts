@@ -15,6 +15,8 @@ export const formatWeekdayShortDate = (iso: string) =>
 /** "Friday, Nov 6" */
 export const formatWeekdayLongDate = (iso: string) =>
   format(iso, { weekday: 'long', month: 'short', day: 'numeric' })
+/** "Nov 9, 2026" */
+export const formatMediumDate = (iso: string) => format(iso, { month: 'short', day: 'numeric', year: 'numeric' })
 /** "NOV" */
 export const formatMonthAbbr = (iso: string) => format(iso, { month: 'short' }).toUpperCase()
 /** "17" */

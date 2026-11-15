@@ -1,4 +1,4 @@
-import type { Frequency, Medication, PetColor, Severity, Sex, Species, SymptomKind } from '../types'
+import type { Frequency, Medication, PetColor, Severity, Sex, Species, SymptomKind, VisitStatus, VisitType } from '../types'
 import { addDays } from '../lib/format'
 
 /**
@@ -38,11 +38,16 @@ export interface SampleDose {
 
 export interface SampleVisit {
   petKey: string
+  type: VisitType
+  status: VisitStatus
   date: string
-  time: string
+  time: string | null
   title: string
-  summary: string
+  diagnosis: string
+  treatment: string
   notes: string
+  cost: number | null
+  reminderDays: number | null
   prescriptionKeys: string[]
   attachments: { kind: 'photo' | 'receipt'; name: string }[]
   weightLogged: boolean
@@ -156,23 +161,32 @@ export function buildSampleData(today: string): SampleData {
     visits: [
       {
         petKey: 'bantay',
+        type: 'Vaccination',
+        status: 'scheduled',
         date: d(4),
         time: '10:00',
         title: 'Annual check-up & vaccines',
-        summary: 'Yearly exam and booster shots.',
-        notes: '',
+        diagnosis: '',
+        treatment: '',
+        notes: 'Yearly exam and booster shots.',
+        cost: null,
+        reminderDays: 1,
         prescriptionKeys: [],
         attachments: [],
         weightLogged: false,
       },
       {
         petKey: 'bantay',
+        type: 'Consultation',
+        status: 'completed',
         date: d(-7),
         time: '15:30',
         title: 'Skin infection on hind leg',
-        summary: 'Prescribed a 14-day antibiotic course. Recheck if redness spreads.',
-        notes:
-          'Red, irritated patch on the left hind leg. Prescribed a 14-day antibiotic course. Recheck if the redness spreads or he stops eating.',
+        diagnosis: 'Red, irritated patch on the left hind leg.',
+        treatment: 'Antibiotic, 14-day course.',
+        notes: 'Recheck if the redness spreads or he stops eating.',
+        cost: 1250,
+        reminderDays: null,
         prescriptionKeys: ['antibiotic'],
         attachments: [
           { kind: 'photo', name: 'Photo' },
@@ -183,23 +197,32 @@ export function buildSampleData(today: string): SampleData {
       },
       {
         petKey: 'mochi',
+        type: 'Consultation',
+        status: 'completed',
         date: d(-8),
         time: '11:00',
         title: 'Ear irritation',
-        summary: 'Mild inflammation, left ear. Ear drops twice daily for 10 days.',
-        notes:
-          'Mild inflammation in the left ear, no sign of mites. Ear drops twice daily for 10 days. Come back if head shaking gets worse.',
+        diagnosis: 'Mild inflammation in the left ear, no sign of mites.',
+        treatment: 'Ear drops twice daily for 10 days.',
+        notes: 'Come back if head shaking gets worse.',
+        cost: null,
+        reminderDays: null,
         prescriptionKeys: ['ear-drops'],
         attachments: [],
         weightLogged: false,
       },
       {
         petKey: 'mochi',
+        type: 'Deworming',
+        status: 'completed',
         date: d(-42),
         time: '09:30',
         title: 'Routine deworming',
-        summary: 'Weight recorded. Next deworming in about 3 months.',
-        notes: 'Routine deworming given at the clinic. Weight recorded. Next deworming in about 3 months.',
+        diagnosis: 'Healthy, weight recorded.',
+        treatment: 'Deworming tablet given at the clinic.',
+        notes: 'Next deworming in about 3 months.',
+        cost: null,
+        reminderDays: null,
         prescriptionKeys: [],
         attachments: [],
         weightLogged: true,

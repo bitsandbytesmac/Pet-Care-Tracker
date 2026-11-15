@@ -66,12 +66,17 @@ export async function seedSampleData(db: Db, userId: string, today: string): Pro
         .values({
           userId,
           petId: petIds.get(v.petKey)!,
+          type: v.type,
+          status: v.status,
           date: v.date,
           time: v.time,
           title: v.title,
           clinic: PLACEHOLDERS.clinic,
-          summary: v.summary,
+          diagnosis: v.diagnosis,
+          treatment: v.treatment,
           notes: v.notes,
+          cost: v.cost,
+          reminderDays: v.reminderDays,
           weightLogged: v.weightLogged,
         })
         .returning({ id: visits.id })

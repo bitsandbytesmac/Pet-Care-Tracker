@@ -3,7 +3,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
-import { Field, inputClass } from '../components/Field'
+import { Field, FormError, inputClass } from '../components/Field'
 import { api } from '../lib/api'
 import { authClient } from '../lib/authClient'
 
@@ -95,7 +95,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
               />
             </Field>
-            <Field label="Password" htmlFor={`${id}-password`}>
+            <Field label="Password" htmlFor={`${id}-password`} hint={signingUp ? 'At least 10 characters.' : undefined}>
               <input
                 id={`${id}-password`}
                 type="password"
@@ -107,18 +107,9 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              {signingUp && (
-                <p id={`${id}-password-hint`} className="mt-1 text-xs text-ink-muted">
-                  At least 10 characters.
-                </p>
-              )}
             </Field>
 
-            {error && (
-              <p role="alert" className="rounded-xl bg-severe-tint px-3 py-2 text-sm text-severe">
-                {error}
-              </p>
-            )}
+            <FormError>{error}</FormError>
 
             <Button type="submit" block disabled={busy}>
               {busy ? 'Please wait…' : signingUp ? 'Create account' : 'Sign in'}

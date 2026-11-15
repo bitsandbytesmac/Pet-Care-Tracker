@@ -2,11 +2,12 @@ import { useId, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
-import { Field, Legend, inputClass } from '../components/Field'
+import { Field, FormError, Legend, inputClass } from '../components/Field'
+import { PageHeader } from '../components/PageHeader'
+import { optionClasses } from '../components/choice'
 import { PetAvatar } from '../components/PetAvatar'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { errorMessage } from '../lib/api'
-import { cx } from '../lib/cx'
 import { useAppState } from '../state/AppStateContext'
 import { PET_COLORS, SEXES, SPECIES, type PetColor, type Sex, type Species } from '../types'
 
@@ -44,10 +45,7 @@ export default function AddPetPage() {
 
   return (
     <>
-      <header>
-        <p className="hidden text-base text-ink-muted md:block">{pets.length === 0 ? 'Let’s get started' : 'Your pets'}</p>
-        <h1 className="text-4xl font-extrabold tracking-tight">Add a pet</h1>
-      </header>
+      <PageHeader title="Add a pet" subtitle={pets.length === 0 ? 'Let’s get started' : 'Your pets'} />
 
       <Card as="section" aria-label="New pet" className="mt-6 max-w-xl p-5 md:p-6">
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -93,10 +91,7 @@ export default function AddPetPage() {
                   type="button"
                   aria-pressed={color === c}
                   onClick={() => setColor(c)}
-                  className={cx(
-                    'flex h-14 items-center gap-3 rounded-2xl border-2 bg-surface pr-5 pl-2 text-sm font-semibold',
-                    color === c ? 'border-primary' : 'border-line hover:border-ink-muted',
-                  )}
+                  className={optionClasses(color === c, 'h-14 pr-5 pl-2 text-sm')}
                 >
                   <PetAvatar pet={{ name: name.trim() || '?', color: c }} size="md" />
                   {colorLabels[c]}
@@ -105,11 +100,7 @@ export default function AddPetPage() {
             </div>
           </fieldset>
 
-          {error && (
-            <p role="alert" className="rounded-xl bg-severe-tint px-3 py-2 text-sm text-severe">
-              {error}
-            </p>
-          )}
+          <FormError>{error}</FormError>
 
           <Button type="submit" block disabled={busy}>
             {busy ? 'Saving…' : 'Save pet'}

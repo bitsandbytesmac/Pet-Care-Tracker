@@ -33,6 +33,8 @@ React 19, Vite 8, TypeScript 7 (strict, `noUncheckedIndexedAccess`), Tailwind v4
 - Daily doses are created by `ensureDosesForDate()`, once per medicine per day. Don't write doses elsewhere except when seeding.
 - Never commit `.env`. Test routes must stay behind `testRoutesEnabled()`.
 - File storage only through `getStorage()`. The Vercel Blob driver is a TODO in `server/storage.ts`.
+- `files` rows have no foreign key (they point at a visit or a symptom). Any route that deletes a visit, symptom or pet must delete their `files` rows and stored objects too (see `removeStoredFiles` in `routes/data.ts`).
+- Visits: `status` is `scheduled` or `completed`; "overdue" and "upcoming" are derived from the client's today in `src/lib/visits.ts`. The `visits.diagnosis` field lives in the original `summary` column.
 
 ## Styling rules
 
@@ -41,6 +43,9 @@ React 19, Vite 8, TypeScript 7 (strict, `noUncheckedIndexedAccess`), Tailwind v4
 - **Display conflicts:** components with a default display use `display('inline-flex', className)` from `lib/cx.ts`, so a caller's `hidden md:inline-flex` wins.
 - Breakpoint is `md`. If markup differs structurally between sizes, render one variant with `useIsDesktop()`. Don't render both and hide one with CSS (it breaks strict Playwright locators).
 - No gradients, no emoji, light shadows only. Icons: `strokeWidth={2}`, `aria-hidden`.
+- Reuse the shared patterns instead of restyling: `PageHeader` for every page title, `FormError`/`FormStatus` (in `Field.tsx`) for form feedback, `chipClasses`/`optionClasses` (`components/choice.ts`) for toggle chips and option cards. Radii: cards and standalone tiles `rounded-2xl`, controls and items inside cards `rounded-xl`, pills `rounded-full`.
+- Don't ship controls that do nothing. Leave unbuilt features out of the UI until they work.
+- Destructive actions live inside the item's edit form (`danger-outline` button) and always go through `ConfirmDialog`, which says exactly what will be removed.
 
 ## Accessibility conventions
 
@@ -56,4 +61,4 @@ React 19, Vite 8, TypeScript 7 (strict, `noUncheckedIndexedAccess`), Tailwind v4
 
 ## Not implemented yet
 
-Add visit, Reschedule, Add questions for the vet, notifications, editing or deleting medicines, recording weights, automatically completing finished courses, password reset, the Vercel Blob driver.
+Notifications (visit reminders are in-app only, on Today), editing or deleting medicines, recording weights, linking visits to medicines from the visit form, automatically completing finished courses, password reset, the Vercel Blob driver.

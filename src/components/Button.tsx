@@ -2,27 +2,23 @@ import type { ButtonHTMLAttributes } from 'react'
 import { Link, type LinkProps } from 'react-router'
 import { cx, display } from '../lib/cx'
 
-export type ButtonVariant =
-  | 'primary'
-  | 'outline'
-  | 'warn-outline'
-  | 'inverse'
-  | 'inverse-outline'
-  | 'dashed'
+export type ButtonVariant = 'primary' | 'outline' | 'warn-outline' | 'inverse' | 'danger' | 'danger-outline'
 
 const variants: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-white hover:bg-primary-dark',
   outline: 'border border-line bg-surface text-ink hover:bg-bg',
   'warn-outline': 'border border-warn-line bg-surface text-warn-dark hover:bg-warn-tint',
   inverse: 'bg-white text-ink hover:bg-divider',
-  'inverse-outline': 'border border-white/30 text-white hover:bg-white/10',
-  dashed: 'border border-dashed border-ink-muted text-ink-soft hover:bg-bg',
+  /** Confirms a destructive action. */
+  danger: 'bg-severe text-white hover:bg-severe/90',
+  /** Starts a destructive action (opens a confirmation). */
+  'danger-outline': 'border border-line bg-surface text-severe hover:border-severe/40 hover:bg-severe-tint',
 }
 
 export function buttonClasses(variant: ButtonVariant = 'primary', block = false, className?: string): string {
   return cx(
     display('inline-flex', className),
-    'h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold whitespace-nowrap transition-colors',
+    'h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold whitespace-nowrap transition-colors disabled:opacity-60',
     variants[variant],
     block && 'w-full',
     className,

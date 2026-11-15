@@ -4,15 +4,27 @@ import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { Button, TextLink } from '../components/Button'
 import { Card, SectionCard } from '../components/Card'
-import { Field, inputClass } from '../components/Field'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Field, FormError, inputClass } from '../components/Field'
+import { VisitStatePill, VisitTypePill } from '../components/VisitPills'
+import { chipClasses } from '../components/choice'
 import { PetAvatar } from '../components/PetAvatar'
 import { SeverityPill, severityDot } from '../components/StatusPill'
 import { cx } from '../lib/cx'
 import { errorMessage } from '../lib/api'
-import { formatShortDate } from '../lib/format'
+import { formatMediumDate, formatShortDate } from '../lib/format'
 import { courseDay } from '../lib/meds'
 import { petTheme } from '../lib/petTheme'
 import { useIsDesktop } from '../lib/useMediaQuery'
+import {
+  PREVENTIVE_TYPES,
+  completedVisits,
+  formatVisitDate,
+  lastAndNext,
+  scheduledVisits,
+  visitState,
+  visitWhen,
+} from '../lib/visits'
 import { useAppState, type PetDetailsPatch } from '../state/AppStateContext'
 import type { Pet } from '../types'
 
@@ -50,29 +62,23 @@ function PetProfile({ pet }: { pet: Pet }) {
       {editing && <EditPetForm pet={pet} onDone={() => setEditing(false)} />}
 
       {isDesktop ? (
-        <div className="mt-6 space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            <ActiveMedsCard pet={pet} />
-            <CareDetailsCard pet={pet} />
-            <WeightTrendCard pet={pet} className="md:col-span-2 xl:col-span-1" />
-          </div>
-          <div className="grid gap-6 xl:grid-cols-2">
-            <VisitsCard pet={pet} />
-            <SymptomsCard pet={pet} />
-          </div>
+        <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <ActiveMedsCard pet={pet} />
+          <PreventiveCareCard pet={pet} />
+          <CareDetailsCard pet={pet} />
+          <VisitsCard pet={pet} />
+          <SymptomsCard pet={pet} />
+          <WeightTrendCard pet={pet} />
         </div>
       ) : (
         <>
-          <nav aria-label="Switch pet" className="mt-5 flex gap-2">
+          <nav aria-label="Switch pet" className="mt-5 flex flex-wrap gap-2">
             {pets.map((p) => (
               <Link
                 key={p.id}
                 to={`/pets/${p.id}`}
                 aria-current={p.id === pet.id ? 'page' : undefined}
-                className={cx(
-                  'flex h-11 items-center gap-2 rounded-full border pr-4 pl-1.5 text-sm font-semibold',
-                  p.id === pet.id ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink',
-                )}
+                className={chipClasses(p.id === pet.id, 'flex items-center gap-2 pr-4 pl-1.5')}
               >
                 <PetAvatar pet={p} size="sm" />
                 {p.name}
@@ -90,10 +96,7 @@ function PetProfile({ pet }: { pet: Pet }) {
                 aria-selected={tab === t.value}
                 aria-controls={`${tabsId}-${t.value}-panel`}
                 onClick={() => setTab(t.value)}
-                className={cx(
-                  'h-11 rounded-full border px-5 text-sm font-semibold',
-                  tab === t.value ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink',
-                )}
+                className={chipClasses(tab === t.value, 'px-5')}
               >
                 {t.label}
               </button>
@@ -109,15 +112,16 @@ function PetProfile({ pet }: { pet: Pet }) {
             {tab === 'overview' && (
               <>
                 <ActiveMedsCard pet={pet} />
+                <PreventiveCareCard pet={pet} />
                 <CareDetailsCard pet={pet} />
                 <SymptomsCard pet={pet} title="Latest symptom" limit={1} />
               </>
             )}
             {tab === 'health' && (
               <>
-                <WeightTrendCard pet={pet} />
                 <VisitsCard pet={pet} />
                 <SymptomsCard pet={pet} />
+                <WeightTrendCard pet={pet} />
               </>
             )}
             {tab === 'files' && <FilesCard pet={pet} />}
@@ -144,13 +148,13 @@ function Banner({ pet, editing, onEdit }: { pet: Pet; editing: boolean; onEdit: 
   return (
     <section
       aria-labelledby="pet-name"
-      className={cx('-mx-5 -mt-6 px-5 pt-6 pb-6 md:mx-0 md:mt-0 md:rounded-3xl md:p-6', theme.banner)}
+      className={cx('-mx-5 -mt-6 px-5 pt-6 pb-6 md:mx-0 md:mt-0 md:rounded-2xl md:p-6', theme.banner)}
     >
       <div className="mb-5 flex items-center justify-between md:hidden">
         <Link
           to="/"
           aria-label="Back to Today"
-          className="flex size-12 items-center justify-center rounded-full bg-white/60 text-ink hover:bg-white"
+          className="flex size-11 items-center justify-center rounded-full bg-white/60 text-ink hover:bg-white"
         >
           <ChevronLeft className="size-5" strokeWidth={2} aria-hidden="true" />
         </Link>
@@ -175,7 +179,7 @@ function Banner({ pet, editing, onEdit }: { pet: Pet; editing: boolean; onEdit: 
             ['Weight', pet.weight],
             ['Neutered', pet.neutered ? 'Yes' : 'No'],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-2xl bg-white/60 px-4 py-3">
+            <div key={label} className="rounded-xl bg-white/60 px-4 py-3">
               <dt className={cx('text-xs font-medium', theme.ink)}>{label}</dt>
               <dd className="mt-0.5 truncate text-lg font-bold text-ink">{value}</dd>
             </div>
@@ -188,8 +192,11 @@ function Banner({ pet, editing, onEdit }: { pet: Pet; editing: boolean; onEdit: 
 }
 
 function EditPetForm({ pet, onDone }: { pet: Pet; onDone: () => void }) {
-  const { updatePet } = useAppState()
+  const { updatePet, deletePet, announce, medications, visits, symptoms } = useAppState()
   const id = useId()
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [draft, setDraft] = useState<Required<PetDetailsPatch>>({
     age: pet.age,
     weight: pet.weight,
@@ -225,6 +232,30 @@ function EditPetForm({ pet, onDone }: { pet: Pet; onDone: () => void }) {
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deletePet(pet.id)
+      // The profile redirects to another pet (or Today) once this pet is gone from state.
+      announce(`${pet.name} was deleted.`)
+    } catch (e) {
+      setDeleteError(errorMessage(e))
+      setDeleting(false)
+    }
+  }
+
+  const petVisits = visits.filter((v) => v.petId === pet.id)
+  const petSymptoms = symptoms.filter((s) => s.petId === pet.id)
+  const fileCount = petVisits.reduce((n, v) => n + v.attachments.length, 0) + petSymptoms.filter((s) => s.photo).length
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+  const records = [
+    count(medications.filter((m) => m.petId === pet.id).length, 'medication', 'medications'),
+    count(petVisits.length, 'vet visit', 'vet visits'),
+    count(petSymptoms.length, 'symptom entry', 'symptom entries'),
+    ...(fileCount ? [count(fileCount, 'photo or file', 'photos and files')] : []),
+  ]
+
   return (
     <Card as="section" aria-labelledby={`${id}-title`} className="mt-6 p-5 md:p-6">
       <h2 id={`${id}-title`} className="text-lg font-bold">
@@ -246,11 +277,7 @@ function EditPetForm({ pet, onDone }: { pet: Pet; onDone: () => void }) {
           />
           Neutered
         </label>
-        {error && (
-          <p role="alert" className="rounded-xl bg-severe-tint px-3 py-2 text-sm text-severe sm:col-span-2 xl:col-span-4">
-            {error}
-          </p>
-        )}
+        <FormError className="sm:col-span-2 xl:col-span-4">{error}</FormError>
         <div className="flex gap-3 self-end sm:col-span-2 xl:col-span-1">
           <Button type="submit" className="flex-1" disabled={busy}>
             {busy ? 'Saving…' : 'Save'}
@@ -260,6 +287,29 @@ function EditPetForm({ pet, onDone }: { pet: Pet; onDone: () => void }) {
           </Button>
         </div>
       </form>
+
+      <div className="mt-6 flex flex-col gap-3 border-t border-divider pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-ink-muted">Deleting {pet.name} also removes their medicines, vet visits and symptom log.</p>
+        <Button variant="danger-outline" onClick={() => setConfirming(true)}>
+          Delete {pet.name}
+        </Button>
+      </div>
+
+      <ConfirmDialog
+        open={confirming}
+        title={`Delete ${pet.name}?`}
+        confirmLabel={`Delete ${pet.name}`}
+        busy={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => {
+          setConfirming(false)
+          setDeleteError('')
+        }}
+      >
+        <p>This permanently deletes {pet.name}’s profile and everything recorded for them: {records.join(', ')}.</p>
+        <p>This can’t be undone.</p>
+      </ConfirmDialog>
     </Card>
   )
 }
@@ -314,33 +364,36 @@ function CareDetailsCard({ pet }: { pet: Pet }) {
   )
 }
 
-/** Bar chart of recorded weights; shows faint placeholder bars until weights exist. */
+/** Bar chart of the last six recorded weights, latest highlighted. */
 function WeightTrendCard({ pet, className }: { pet: Pet; className?: string }) {
   const records = pet.weightHistory.slice(-6)
-  const hasData = records.length > 0
-  const values = hasData ? records.map((r) => r.kg) : [55, 62, 66, 68, 72]
-  const max = Math.max(...values)
+  const latest = records.at(-1)
+
+  if (!latest) {
+    return (
+      <SectionCard title="Weight trend" className={className}>
+        <p className="mt-2 text-sm text-ink-muted">Weights recorded at each vet visit will appear here.</p>
+      </SectionCard>
+    )
+  }
+
+  const max = Math.max(...records.map((r) => r.kg))
   const barWidth = 40
   const gap = 16
   const height = 100
-  const width = values.length * barWidth + (values.length - 1) * gap
-  const description = hasData
-    ? `Weights: ${records.map((r) => `${formatShortDate(r.date)} ${r.kg} kg`).join(', ')}`
-    : undefined
+  const width = records.length * barWidth + (records.length - 1) * gap
 
   return (
     <SectionCard title="Weight trend" className={className}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="mt-4 h-28 w-full"
-        role={hasData ? 'img' : undefined}
-        aria-label={description}
-        aria-hidden={hasData ? undefined : true}
+        role="img"
+        aria-label={`Weights: ${records.map((r) => `${formatShortDate(r.date)} ${r.kg} kg`).join(', ')}`}
         preserveAspectRatio="xMidYMax meet"
       >
-        {values.map((v, i) => {
-          const h = (v / max) * (height - 4)
-          const last = i === values.length - 1
+        {records.map((r, i) => {
+          const h = (r.kg / max) * (height - 4)
           return (
             <rect
               key={i}
@@ -349,31 +402,94 @@ function WeightTrendCard({ pet, className }: { pet: Pet; className?: string }) {
               width={barWidth}
               height={h}
               rx={4}
-              className={hasData ? (last ? 'fill-primary' : 'fill-primary-tint') : last ? 'fill-line' : 'fill-divider'}
+              className={r === latest ? 'fill-primary' : 'fill-primary-tint'}
             />
           )
         })}
       </svg>
       <p className="mt-3 text-xs text-ink-muted">
-        {hasData
-          ? `Latest: ${records.at(-1)?.kg} kg on ${formatShortDate(records.at(-1)?.date ?? '')}`
-          : 'Weights recorded at each vet visit appear here.'}
+        Latest: {latest.kg} kg on {formatShortDate(latest.date)}
       </p>
     </SectionCard>
   )
 }
 
 function VisitsCard({ pet }: { pet: Pet }) {
-  const { visits } = useAppState()
-  const past = visits
-    .filter((v) => v.petId === pet.id && !v.upcoming)
-    .sort((a, b) => b.date.localeCompare(a.date))
+  const { visits, today } = useAppState()
+  const mine = visits.filter((v) => v.petId === pet.id)
+  const upcoming = scheduledVisits(mine)
+  const past = completedVisits(mine)
   return (
-    <SectionCard title="Vet visits" action={<TextLink to="/visits">All visits</TextLink>}>
+    <SectionCard title="Vet visits" action={<TextLink to={`/visits?pet=${pet.id}&new=completed`}>Log visit</TextLink>}>
+      {upcoming.length > 0 && (
+        <ul aria-label={`${pet.name}’s appointments`} className="mt-2 space-y-2">
+          {upcoming.slice(0, 2).map((v) => (
+            <li key={v.id} className="flex items-center gap-3 rounded-xl bg-bg px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">{v.title}</p>
+                <p className="text-xs text-ink-muted">
+                  {v.type} · {formatVisitDate(v)}
+                </p>
+              </div>
+              <VisitStatePill state={visitState(v, today)} label={visitWhen(v, today)} />
+            </li>
+          ))}
+        </ul>
+      )}
       <DatedList
-        empty="No vet visits yet."
-        items={past.map((v) => ({ id: v.id, date: v.date, title: v.title, detail: v.summary }))}
+        empty={upcoming.length ? 'No past visits yet.' : 'No vet visits yet.'}
+        items={past.slice(0, 4).map((v) => ({
+          id: v.id,
+          date: v.date,
+          title: v.title,
+          detail: v.diagnosis || v.treatment,
+          trailing: <VisitTypePill type={v.type} />,
+        }))}
       />
+      {mine.length > 0 && <TextLink to={`/visits?pet=${pet.id}`}>Full history</TextLink>}
+    </SectionCard>
+  )
+}
+
+/** Last and next vaccination and deworming, so they're easy to find without scrolling the history. */
+function PreventiveCareCard({ pet }: { pet: Pet }) {
+  const { visits, today } = useAppState()
+  return (
+    <SectionCard title="Vaccines & deworming">
+      <dl className="mt-1 divide-y divide-divider">
+        {PREVENTIVE_TYPES.map((type) => {
+          const { last, next } = lastAndNext(visits, pet.id, type)
+          // Before any vaccination visit is logged, fall back to the profile's manual "Last vaccine" note.
+          const lastText = last
+            ? formatMediumDate(last.date)
+            : type === 'Vaccination' && pet.lastVaccine
+              ? pet.lastVaccine
+              : 'None recorded'
+          return (
+            <div key={type} className="py-3">
+              <dt className="text-sm font-semibold text-ink">{type}</dt>
+              <dd className="mt-1 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="block text-xs text-ink-muted">Last</span>
+                  <span className={last ? 'font-medium text-ink' : 'text-ink-muted'}>{lastText}</span>
+                </div>
+                <div>
+                  <span className="block text-xs text-ink-muted">Next</span>
+                  {next ? (
+                    <span className={cx('font-medium', visitState(next, today) === 'overdue' ? 'text-warn-dark' : 'text-ink')}>
+                      {formatShortDate(next.date)} · {visitWhen(next, today)}
+                    </span>
+                  ) : (
+                    <TextLink to={`/visits?pet=${pet.id}&new=scheduled`} className="-mt-2.5">
+                      Schedule<span className="sr-only"> {type.toLowerCase()}</span>
+                    </TextLink>
+                  )}
+                </div>
+              </dd>
+            </div>
+          )
+        })}
+      </dl>
     </SectionCard>
   )
 }

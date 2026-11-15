@@ -1,49 +1,25 @@
-import { Camera, Download, X } from 'lucide-react'
+import { Camera, Download } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
-import { useLocation, useNavigate } from 'react-router'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
-import { Field, Legend, inputClass, textareaClass } from '../components/Field'
+import { Field, FormError, FormStatus, Legend, inputClass, textareaClass } from '../components/Field'
+import { PageHeader } from '../components/PageHeader'
+import { chipClasses, optionClasses } from '../components/choice'
 import { PetAvatar } from '../components/PetAvatar'
 import { SectionHeader } from '../components/SectionHeader'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { SeverityPill } from '../components/StatusPill'
 import { errorMessage } from '../lib/api'
-import { cx } from '../lib/cx'
 import { currentTime, formatShortDate, formatTime } from '../lib/format'
 import { useAppState } from '../state/AppStateContext'
 import { SEVERITIES, SYMPTOM_KINDS, type Pet, type Severity, type SymptomEntry, type SymptomKind } from '../types'
 
 export default function LogPage() {
   const { pets, symptoms } = useAppState()
-  const navigate = useNavigate()
-  const location = useLocation()
-
-  function close() {
-    // "default" key means this page was the first one loaded — nothing to go back to.
-    if (location.key === 'default') navigate('/')
-    else navigate(-1)
-  }
 
   return (
     <>
-      <header className="flex items-center gap-4">
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={close}
-          className="flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-surface md:hidden"
-        >
-          <X className="size-5" strokeWidth={2} aria-hidden="true" />
-        </button>
-        <div>
-          <p className="hidden text-base text-ink-muted md:block">Track what you notice between vet visits</p>
-          <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
-            <span className="md:hidden">Log a symptom</span>
-            <span className="hidden md:inline">Symptom log</span>
-          </h1>
-        </div>
-      </header>
+      <PageHeader title="Symptom log" subtitle="Track what you notice between vet visits" />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2 lg:items-start">
         <SymptomForm />
@@ -108,10 +84,10 @@ function SymptomForm() {
 
   return (
     <Card as="section" aria-labelledby={`${id}-title`} className="p-5 md:p-6">
-      <h2 id={`${id}-title`} className="sr-only md:not-sr-only md:mb-4 md:text-lg md:font-bold">
+      <h2 id={`${id}-title`} className="mb-4 text-lg font-bold">
         New entry
       </h2>
-      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <fieldset>
           <Legend>Which pet?</Legend>
           <div className="grid grid-cols-2 gap-3">
@@ -123,12 +99,9 @@ function SymptomForm() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => setPetId(pet.id)}
-                  className={cx(
-                    'flex h-16 items-center gap-3 rounded-2xl border-2 bg-surface px-3 text-left text-base font-semibold transition-colors md:h-14',
-                    active ? 'border-primary' : 'border-line hover:border-ink-muted',
-                  )}
+                  className={optionClasses(active, 'h-14 px-3 text-base')}
                 >
-                  <PetAvatar pet={pet} size="lg" className="md:size-9" />
+                  <PetAvatar pet={pet} size="md" />
                   {pet.name}
                 </button>
               )
@@ -147,10 +120,7 @@ function SymptomForm() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => toggleSymptom(kind)}
-                  className={cx(
-                    'h-11 rounded-full border px-4 text-sm font-medium transition-colors',
-                    active ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink hover:bg-divider',
-                  )}
+                  className={chipClasses(active)}
                 >
                   {kind}
                 </button>
@@ -203,17 +173,11 @@ function SymptomForm() {
           />
         </Field>
 
-        {error && (
-          <p role="alert" className="rounded-xl bg-severe-tint px-3 py-2 text-sm text-severe">
-            {error}
+        <div>
+          <p className="mb-1.5 text-sm font-semibold text-ink">
+            Photo <span className="font-normal text-ink-muted">(optional)</span>
           </p>
-        )}
-        <p role="status" className="rounded-xl bg-primary-tint px-3 py-2 text-sm font-semibold text-primary-dark empty:hidden">
-          {saved}
-        </p>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-ink-muted px-4 text-sm font-medium text-ink-soft hover:bg-bg has-focus-visible:outline-2 has-focus-visible:outline-primary">
+          <label className="flex h-11 items-center gap-2 rounded-xl border border-dashed border-ink-muted px-3 text-sm font-medium text-ink-soft transition-colors hover:bg-bg has-focus-visible:outline-2 has-focus-visible:outline-primary">
             <Camera className="size-4 shrink-0" strokeWidth={2} aria-hidden="true" />
             <span className="truncate">{photo?.name ?? 'Add a photo'}</span>
             <input
@@ -223,10 +187,14 @@ function SymptomForm() {
               onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
             />
           </label>
-          <Button type="submit" className="h-12 text-base" disabled={busy}>
-            Save entry{count > 0 && ` (${count} symptom${count > 1 ? 's' : ''})`}
-          </Button>
         </div>
+
+        <FormError>{error}</FormError>
+        <FormStatus>{saved}</FormStatus>
+
+        <Button type="submit" block className="h-12 text-base" disabled={busy}>
+          {busy ? 'Saving…' : `Save entry${count > 0 ? ` (${count} symptom${count > 1 ? 's' : ''})` : ''}`}
+        </Button>
       </form>
     </Card>
   )
@@ -256,13 +224,14 @@ function SymptomHistory({ entries, pets }: { entries: SymptomEntry[]; pets: Pet[
         id={id}
         title="History"
         action={
-          <Button variant="outline" onClick={exportForVet}>
+          <Button variant="outline" onClick={exportForVet} disabled={entries.length === 0}>
             <Download className="size-4" strokeWidth={2} aria-hidden="true" />
             Export for vet
           </Button>
         }
       />
-      <ol aria-label="Symptom history" className="mt-3 divide-y divide-divider">
+      {entries.length === 0 && <p className="mt-2 text-sm text-ink-muted">Nothing logged yet.</p>}
+      <ol aria-label="Symptom history" className="mt-3 divide-y divide-divider empty:hidden">
         {entries.map((entry) => {
           const pet = pets.find((p) => p.id === entry.petId)
           return (

@@ -6,7 +6,7 @@ import { useAppState } from '../state/AppStateContext'
 import { FREQUENCIES, type Frequency } from '../types'
 import { Button } from './Button'
 import { Card } from './Card'
-import { Field, inputClass } from './Field'
+import { Field, FormError, FormStatus, inputClass } from './Field'
 
 const defaultTimes: Record<Frequency, string> = {
   'Once daily': '8:00 AM',
@@ -32,7 +32,7 @@ export function AddMedicationForm({ className }: { className?: string }) {
 
   if (pets.length === 0) {
     return (
-      <Card as="section" aria-label="Add medication" className={cx('p-5 text-sm text-ink-muted', className)}>
+      <Card as="section" aria-label="Add medication" className={cx('p-5 text-sm text-ink-muted md:p-6', className)}>
         Add a pet first, then you can add their medicines.
       </Card>
     )
@@ -76,7 +76,7 @@ export function AddMedicationForm({ className }: { className?: string }) {
 
   return (
     <Card as="section" aria-labelledby={headingId} className={className}>
-      <form onSubmit={handleSubmit} className="space-y-4 p-5" noValidate>
+      <form onSubmit={handleSubmit} className="space-y-4 p-5 md:p-6" noValidate>
         <h2 id={headingId} className="text-lg font-bold">
           Add medication
         </h2>
@@ -131,18 +131,19 @@ export function AddMedicationForm({ className }: { className?: string }) {
               ))}
             </select>
           </Field>
-          <Field label="For how long" htmlFor={`${id}-duration`}>
+          <Field label="For how long" htmlFor={`${id}-duration`} hint="Leave blank if ongoing.">
             <input
               id={`${id}-duration`}
               className={inputClass}
               placeholder="e.g. 10 days"
+              aria-describedby={`${id}-duration-hint`}
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
             />
           </Field>
         </div>
 
-        <Field label="Reminder times" htmlFor={`${id}-times`}>
+        <Field label="Reminder times" htmlFor={`${id}-times`} hint="Separate times with commas.">
           <input
             id={`${id}-times`}
             className={inputClass}
@@ -150,19 +151,10 @@ export function AddMedicationForm({ className }: { className?: string }) {
             onChange={(e) => setTimes(e.target.value)}
             aria-describedby={`${id}-times-hint`}
           />
-          <p id={`${id}-times-hint`} className="mt-1 text-xs text-ink-muted">
-            Separate times with commas.
-          </p>
         </Field>
 
-        {error && (
-          <p role="alert" className="rounded-xl bg-severe-tint px-3 py-2 text-sm text-severe">
-            {error}
-          </p>
-        )}
-        <p role="status" className="text-sm font-semibold text-primary-dark empty:hidden">
-          {saved}
-        </p>
+        <FormError>{error}</FormError>
+        <FormStatus>{saved}</FormStatus>
 
         <Button type="submit" block disabled={busy}>
           {busy ? 'Saving…' : 'Save medication'}

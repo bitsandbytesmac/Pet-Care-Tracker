@@ -9,7 +9,7 @@ type CardProps = HTMLAttributes<HTMLElement> & {
 /** White rounded surface with a light border. */
 export function Card({ as = 'div', className, ...props }: CardProps) {
   return createElement(as, {
-    className: cx('rounded-3xl border border-line bg-surface', className),
+    className: cx('rounded-2xl border border-line bg-surface', className),
     ...props,
   })
 }

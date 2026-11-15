@@ -11,6 +11,8 @@ import type {
   SymptomEntry,
   SymptomKind,
   Visit,
+  VisitStatus,
+  VisitType,
   WeightRecord,
 } from '../src/types'
 import type { doses, files, medications, pets, symptoms, visits } from './db/schema'
@@ -71,25 +73,24 @@ export function toAttachment(row: typeof files.$inferSelect): Attachment {
   return { id: row.id, kind: row.kind as Attachment['kind'], name: row.name, url: row.storageKey ? `/api/files/${row.id}` : null }
 }
 
-export function toVisit(
-  row: typeof visits.$inferSelect,
-  prescriptionIds: string[],
-  attachments: Attachment[],
-  today: string,
-): Visit {
+export function toVisit(row: typeof visits.$inferSelect, prescriptionIds: string[], attachments: Attachment[]): Visit {
   return {
     id: row.id,
     petId: row.petId,
+    type: row.type as VisitType,
+    status: row.status as VisitStatus,
     date: row.date,
     time: row.time,
     title: row.title,
     clinic: row.clinic,
-    summary: row.summary,
+    diagnosis: row.diagnosis,
+    treatment: row.treatment,
     notes: row.notes,
+    cost: row.cost,
+    reminderDays: row.reminderDays,
     prescriptionIds,
     attachments,
     weightLogged: row.weightLogged,
-    upcoming: row.date >= today,
   }
 }
 

@@ -6,11 +6,11 @@ A personal Pet Care & Medication Tracker. It tracks daily doses, medication cour
 | --- | --- | --- | --- |
 | Sign in | `/login` | Email + password; optional sign-up | Same |
 | Today | `/` | Summary tiles, schedule, upcoming visit, recent symptoms | Dose card, schedule, pet chips |
-| Pet profile | `/pets/:petId` | All cards in a grid; sidebar switches pets | Overview / Health / Files tabs |
+| Pet profile | `/pets/:petId` | All cards in a grid (incl. vaccines & deworming); edit or delete the pet; sidebar switches pets | Overview / Health / Files tabs |
 | Add a pet | `/pets/new` | Form | Form |
 | Medications | `/medications` | Table + Add medication form | One card per medicine |
-| Vet visits | `/visits` | Visit list + details panel, file uploads | Vertical timeline |
-| Log a symptom | `/log` | Form + History side by side, photo upload | Form, then History |
+| Vet visits | `/visits` | Log past visits, schedule appointments (with in-app reminders), mark done, edit, delete; filter by pet and type; history list + details panel, file uploads | Upcoming cards; history timeline with expandable details |
+| Symptom log | `/log` | Form + History side by side, photo upload | Form, then History |
 
 ## Tech stack
 
@@ -115,6 +115,9 @@ All routes are under `/api`. Everything except `health`, `config`, `auth/*` and 
 | `GET, POST /auth/*` | Better Auth (sign-up, sign-in, sign-out, session) |
 | `GET /state?date=` | Everything for the app: pets, medicines, that day's doses, visits, symptoms |
 | `POST /pets`, `PATCH /pets/:id` | Add a pet; edit details |
+| `DELETE /pets/:id` | Delete a pet with its medicines, doses, visits, symptoms, weights and uploaded files |
+| `POST /visits`, `PATCH /visits/:id` | Log a past visit or schedule one (`status: completed \| scheduled`); edit or mark done |
+| `DELETE /visits/:id` | Delete a visit and its uploaded files (prescribed medicines stay) |
 | `POST /medications` | Add a medicine and create today's doses |
 | `POST /medications/:id/refill` | Reset a supply to full |
 | `PATCH /doses/:id` `{ given }` | Mark given / not given. Idempotent; adjusts supply once per change. |
@@ -128,7 +131,7 @@ All routes are under `/api`. Everything except `health`, `config`, `auth/*` and 
 | Layer | Tool | Where | Covers |
 | --- | --- | --- | --- |
 | Unit | Vitest | `src/**/*.test.ts` | Date maths and validation, reminder-time parsing, dose status by clock, course day, refill threshold, schedule building |
-| API integration | Vitest + real Postgres | `server/**/*.test.ts` | Auth required; users can't see or change each other's data; validation; daily dose generation (repeated + concurrent calls, course end); supply changes on give/undo; uploads (type, size, CSRF, ownership) |
+| API integration | Vitest + real Postgres | `server/**/*.test.ts` | Auth required; users can't see or change each other's data; validation; daily dose generation (repeated + concurrent calls, course end); supply changes on give/undo; uploads (type, size, CSRF, ownership); visit create/edit/delete; deleting a pet removes all its records and files |
 | End-to-end | Playwright | `tests/*.spec.ts` | Every screen at desktop + phone size, including sign-in/sign-up/sign-out, data surviving a reload, and rollback when saving fails |
 | Accessibility | axe-core in Playwright | `tests/accessibility.spec.ts` | WCAG 2.1 A/AA on every screen at both sizes, including sign-in and Add a pet |
 
@@ -149,7 +152,8 @@ The code is set up so this is mostly configuration:
 
 ## Known limitations
 
-- Not built yet: Add visit, Reschedule, Add questions for the vet, notifications, editing or deleting medicines, recording weights (the weight chart shows placeholder bars).
+- Not built yet: notifications (appointment reminders show on the Today screen only), editing or deleting medicines, recording weights (the weight card shows an empty state until weights exist), linking a logged visit to medicines in the app (treatment is free text).
+- Visits recorded before visit types existed show as type "Other"; edit them to set the right type.
 - A course past its last day stops getting doses, but it isn't moved to "Completed" automatically yet.
 - Sample placeholder attachments (Photo, Receipt) have no file behind them; uploaded files open in a new tab.
 - There's no password reset yet (it needs an email provider).
@@ -158,6 +162,6 @@ The code is set up so this is mostly configuration:
 
 1. Deploy: Neon + Vercel Blob driver + first Vercel deploy (see above)
 2. Reminders: installable PWA + web push or email, triggered by a scheduler (Vercel Cron runs at most once a day on the Hobby plan, so consider Upstash QStash)
-3. Add visit / reschedule / questions for the vet; edit and delete medicines; record weights
+3. Edit and delete medicines; record weights; link visits to prescribed medicines
 4. Password reset and email verification (e.g. Resend)
 5. Error tracking (Sentry) and scheduled database backups

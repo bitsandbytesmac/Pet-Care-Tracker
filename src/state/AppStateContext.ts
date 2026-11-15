@@ -1,5 +1,18 @@
 import { createContext, useContext } from 'react'
-import type { AppData, Frequency, Medication, Pet, PetColor, Severity, Sex, Species, SymptomEntry, SymptomKind } from '../types'
+import type {
+  AppData,
+  Frequency,
+  Medication,
+  Pet,
+  PetColor,
+  Severity,
+  Sex,
+  Species,
+  SymptomEntry,
+  SymptomKind,
+  Visit,
+  VisitInput,
+} from '../types'
 
 export interface NewPet {
   name: string
@@ -46,6 +59,13 @@ export interface AppState extends AppData {
   addMedication: (input: NewMedication) => Promise<Medication>
   addSymptom: (input: NewSymptomEntry, photo?: File) => Promise<SymptomEntry>
   addAttachment: (visitId: string, file: File) => Promise<void>
+  /** Permanently delete a pet and all of its records. */
+  deletePet: (petId: string) => Promise<void>
+  addVisit: (input: VisitInput) => Promise<Visit>
+  updateVisit: (visitId: string, input: VisitInput) => Promise<Visit>
+  deleteVisit: (visitId: string) => Promise<void>
+  /** Show a short confirmation at the top of the screen (e.g. after a delete that navigates away). */
+  announce: (message: string) => void
 }
 
 export const AppStateContext = createContext<AppState | null>(null)

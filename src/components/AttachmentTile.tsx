@@ -14,7 +14,7 @@ interface AttachmentTileProps {
 export function AttachmentTile({ attachment, caption, className }: AttachmentTileProps) {
   const Icon = icons[attachment.kind]
   const base = cx(
-    'relative flex flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl bg-divider p-2 text-center text-xs text-ink-muted',
+    'relative flex flex-col items-center justify-center gap-1 overflow-hidden rounded-xl bg-divider p-2 text-center text-xs text-ink-muted',
     className,
   )
   const label = (

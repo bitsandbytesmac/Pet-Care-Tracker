@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { AddMedicationForm } from '../components/AddMedicationForm'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { PageHeader } from '../components/PageHeader'
 import { PetPill } from '../components/PetAvatar'
 import { ProgressBar } from '../components/ProgressBar'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -28,42 +29,44 @@ export default function MedicationsPage() {
 
   return (
     <>
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="hidden text-base text-ink-muted md:block">All pets</p>
-          <h1 className="text-4xl font-extrabold tracking-tight">Medications</h1>
-        </div>
-        <button
-          type="button"
-          aria-label={formOpen ? 'Close add medication form' : 'Add medication'}
-          aria-expanded={formOpen}
-          onClick={() => setFormOpen((open) => !open)}
-          className="flex size-14 items-center justify-center rounded-full bg-primary text-white md:hidden"
-        >
-          {formOpen ? (
-            <X className="size-6" strokeWidth={2} aria-hidden="true" />
-          ) : (
-            <Plus className="size-6" strokeWidth={2} aria-hidden="true" />
-          )}
-        </button>
-        <SegmentedControl
-          label="Show medications"
-          className="w-full md:w-auto"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'active', label: `Active (${active.length})` },
-            { value: 'completed', label: `Completed (${completed.length})` },
-          ]}
-        />
-      </header>
+      <PageHeader
+        title="Medications"
+        subtitle="All pets"
+        actions={
+          !isDesktop && (
+            <Button
+              variant={formOpen ? 'outline' : 'primary'}
+              aria-expanded={formOpen}
+              onClick={() => setFormOpen((open) => !open)}
+            >
+              {formOpen ? (
+                <X className="size-4" strokeWidth={2} aria-hidden="true" />
+              ) : (
+                <Plus className="size-4" strokeWidth={2} aria-hidden="true" />
+              )}
+              {formOpen ? 'Close' : 'Add medication'}
+            </Button>
+          )
+        }
+      />
+
+      <SegmentedControl
+        label="Show medications"
+        className="mt-5 w-full md:w-fit"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'active', label: `Active (${active.length})` },
+          { value: 'completed', label: `Completed (${completed.length})` },
+        ]}
+      />
 
       {!isDesktop && formOpen && <AddMedicationForm className="mt-5" />}
 
       {refills.map((med) => (
         <div
           key={med.id}
-          className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-warn-line bg-warn-tint p-4 text-warn-dark"
+          className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-warn-line bg-warn-tint p-4 text-warn-dark"
         >
           <TriangleAlert className="size-6 shrink-0 text-warn" strokeWidth={2} aria-hidden="true" />
           <div className="min-w-0 flex-1">
@@ -80,7 +83,11 @@ export default function MedicationsPage() {
 
       {isDesktop ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-          <MedicationTable meds={list} pets={pets} doses={doses} tab={tab} />
+          {list.length > 0 ? (
+            <MedicationTable meds={list} pets={pets} doses={doses} tab={tab} />
+          ) : (
+            <EmptyMeds tab={tab} />
+          )}
           <AddMedicationForm />
         </div>
       ) : (
@@ -92,12 +99,16 @@ export default function MedicationsPage() {
         </ul>
       )}
 
-      {list.length === 0 && (
-        <p className="mt-6 text-center text-sm text-ink-muted">
-          {tab === 'active' ? 'No active medications.' : 'No completed medications yet.'}
-        </p>
-      )}
+      {!isDesktop && list.length === 0 && <EmptyMeds tab={tab} className="mt-5" />}
     </>
+  )
+}
+
+function EmptyMeds({ tab, className }: { tab: Tab; className?: string }) {
+  return (
+    <p className={cx('rounded-2xl border border-dashed border-line px-5 py-10 text-center text-sm text-ink-muted', className)}>
+      {tab === 'active' ? 'No active medications.' : 'No completed medications yet.'}
+    </p>
   )
 }
 
@@ -106,7 +117,7 @@ function MedIcon({ warn }: { warn: boolean }) {
     <span
       aria-hidden="true"
       className={cx(
-        'flex size-12 shrink-0 items-center justify-center rounded-2xl',
+        'flex size-12 shrink-0 items-center justify-center rounded-xl',
         warn ? 'bg-warn-tint text-warn' : 'bg-primary-tint text-primary',
       )}
     >

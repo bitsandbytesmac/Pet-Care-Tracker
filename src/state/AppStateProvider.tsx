@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { cx } from '../lib/cx'
+import { CircleCheck, X } from 'lucide-react'
 import { Button } from '../components/Button'
 import { api, errorMessage } from '../lib/api'
 import { localIsoDate } from '../lib/format'
 import { useNow } from '../lib/useNow'
-import type { AppData, Attachment, Dose, Medication, Pet, SymptomEntry } from '../types'
+import type { AppData, Attachment, Dose, Medication, Pet, SymptomEntry, Visit, VisitInput } from '../types'
 import { AppStateContext, type AppState, type NewMedication, type NewPet, type NewSymptomEntry, type PetDetailsPatch } from './AppStateContext'
 
 function uploadForm(ownerType: 'visit' | 'symptom', ownerId: string, file: File): FormData {
@@ -44,7 +45,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const today = localIsoDate(now)
   const [data, setData] = useState<AppData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNoticeState] = useState<{ text: string; tone: 'warn' | 'success' } | null>(null)
+  const setNotice = useCallback((text: string | null) => setNoticeState(text ? { text, tone: 'warn' } : null), [])
+  const announce = useCallback((text: string) => setNoticeState({ text, tone: 'success' }), [])
+
+  // Confirmations dismiss themselves; problems stay until dismissed.
+  useEffect(() => {
+    if (notice?.tone !== 'success') return
+    const timer = setTimeout(() => setNoticeState(null), 5000)
+    return () => clearTimeout(timer)
+  }, [notice])
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -153,6 +163,49 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [update],
   )
 
+  const deletePet = useCallback(
+    async (petId: string) => {
+      await api<void>(`/pets/${petId}`, { method: 'DELETE' })
+      update((d) => {
+        const medIds = new Set(d.medications.filter((m) => m.petId === petId).map((m) => m.id))
+        return {
+          pets: d.pets.filter((p) => p.id !== petId),
+          medications: d.medications.filter((m) => !medIds.has(m.id)),
+          doses: d.doses.filter((dose) => !medIds.has(dose.medicationId)),
+          visits: d.visits.filter((v) => v.petId !== petId),
+          symptoms: d.symptoms.filter((s) => s.petId !== petId),
+        }
+      })
+    },
+    [update],
+  )
+
+  const addVisit = useCallback(
+    async (input: VisitInput) => {
+      const visit = await api<Visit>('/visits', { method: 'POST', body: input })
+      update((d) => ({ ...d, visits: [visit, ...d.visits] }))
+      return visit
+    },
+    [update],
+  )
+
+  const updateVisit = useCallback(
+    async (visitId: string, input: VisitInput) => {
+      const visit = await api<Visit>(`/visits/${visitId}`, { method: 'PATCH', body: input })
+      update((d) => ({ ...d, visits: replaceById(d.visits, visit) }))
+      return visit
+    },
+    [update],
+  )
+
+  const deleteVisit = useCallback(
+    async (visitId: string) => {
+      await api<void>(`/visits/${visitId}`, { method: 'DELETE' })
+      update((d) => ({ ...d, visits: d.visits.filter((v) => v.id !== visitId) }))
+    },
+    [update],
+  )
+
   const value = useMemo<AppState | null>(
     () =>
       data && {
@@ -166,15 +219,36 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         addMedication,
         addSymptom,
         addAttachment,
+        deletePet,
+        addVisit,
+        updateVisit,
+        deleteVisit,
+        announce,
       },
-    [data, today, now, toggleDose, markRefilled, addPet, updatePet, addMedication, addSymptom, addAttachment],
+    [
+      data,
+      today,
+      now,
+      toggleDose,
+      markRefilled,
+      addPet,
+      updatePet,
+      addMedication,
+      addSymptom,
+      addAttachment,
+      deletePet,
+      addVisit,
+      updateVisit,
+      deleteVisit,
+      announce,
+    ],
   )
 
   if (!value) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-bg px-5">
         {loadError ? (
-          <div role="alert" className="max-w-sm rounded-3xl border border-line bg-surface p-6 text-center">
+          <div role="alert" className="max-w-sm rounded-2xl border border-line bg-surface p-6 text-center">
             <p className="font-semibold text-ink">Couldn’t load your pets</p>
             <p className="mt-1 text-sm text-ink-muted">{loadError}</p>
             <Button className="mt-4" onClick={() => setReloadKey((k) => k + 1)}>
@@ -195,14 +269,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       {children}
       {notice && (
         <div
-          role="alert"
-          className="fixed inset-x-5 top-4 z-50 mx-auto flex max-w-md items-start gap-3 rounded-2xl border border-warn-line bg-warn-tint p-4 text-sm text-warn-dark shadow-lg shadow-ink/10"
+          role={notice.tone === 'warn' ? 'alert' : 'status'}
+          className={cx(
+            'fixed inset-x-5 top-4 z-50 mx-auto flex max-w-md items-start gap-3 rounded-2xl border p-4 text-sm shadow-lg shadow-ink/10',
+            notice.tone === 'warn'
+              ? 'border-warn-line bg-warn-tint text-warn-dark'
+              : 'border-primary/30 bg-primary-tint font-semibold text-primary-dark',
+          )}
         >
-          <p className="flex-1">{notice}</p>
+          {notice.tone === 'success' && <CircleCheck className="mt-0.5 size-4 shrink-0" strokeWidth={2} aria-hidden="true" />}
+          <p className="flex-1">{notice.text}</p>
           <button
             type="button"
             aria-label="Dismiss"
-            onClick={() => setNotice(null)}
+            onClick={() => setNoticeState(null)}
             className="-m-2 flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-white/60"
           >
             <X className="size-4" strokeWidth={2} aria-hidden="true" />

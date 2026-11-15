@@ -76,21 +76,56 @@ export interface Attachment {
   url: string | null
 }
 
+export const VISIT_TYPES = [
+  'Vaccination',
+  'Deworming',
+  'General checkup',
+  'Consultation',
+  'Medication',
+  'Surgery',
+  'Dental care',
+  'Other',
+] as const
+export type VisitType = (typeof VISIT_TYPES)[number]
+
+/** "scheduled" = an appointment that hasn't happened yet (or is overdue); "completed" = a past visit on record. */
+export const VISIT_STATUSES = ['scheduled', 'completed'] as const
+export type VisitStatus = (typeof VISIT_STATUSES)[number]
+
+/** Reminder lead times in days before an appointment (0 = on the day). */
+export const REMINDER_DAYS = [0, 1, 3, 7] as const
+
 export interface Visit {
   id: string
   petId: string
+  type: VisitType
+  status: VisitStatus
   date: string
-  time: string
+  /** "HH:mm", or null when the time isn't known. */
+  time: string | null
+  /** Reason for the visit. */
   title: string
+  /** Vet or clinic name. */
   clinic: string
-  summary: string
+  /** Diagnosis or findings. */
+  diagnosis: string
+  /** Treatment or medication prescribed (free text). */
+  treatment: string
   notes: string
+  cost: number | null
+  /** Show a reminder this many days before a scheduled visit; null = no reminder. */
+  reminderDays: number | null
+  /** Medicines in the app linked to this visit. */
   prescriptionIds: string[]
   attachments: Attachment[]
   weightLogged: boolean
-  /** True when the visit is today or later (relative to the requested date). */
-  upcoming: boolean
 }
+
+/** Fields a user can set when logging or editing a visit. */
+export type VisitInput = Pick<
+  Visit,
+  'petId' | 'type' | 'status' | 'date' | 'time' | 'title' | 'clinic' | 'diagnosis' | 'treatment' | 'notes' | 'cost' | 'reminderDays'
+>
 
 export const SYMPTOM_KINDS = [
   'Vomiting',
